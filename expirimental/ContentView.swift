@@ -8,14 +8,22 @@ struct ContentView: View {
         "Instagram post - 58"
     ]
     
-    private let stackCount = 8
-    private let initialStackIndex = 4
+    private let stackCount = 12
+    private let initialStackIndex = 6
     private let visibleCardWidthRatio: CGFloat = 0.58
     
     @State private var dragOffset: CGFloat = 0
     @State private var currentIndex: Int
     @State private var dragStartTime: Date?
     @State private var isDragging = false
+    @State private var accumulatedVelocity: CGFloat = 0  // накопленная скорость
+    
+    // Debug parameters
+    @State private var showDebug = false
+    @State private var debugSpacing: CGFloat = 0.55
+    @State private var debugMaxAngle: Double = 80
+    @State private var debugVelocityMultiplier: CGFloat = 1.2
+    @State private var debugAnimDuration: Double = 0.5
     
     init() {
         let initialID = initialStackIndex * posters.count
@@ -35,6 +43,7 @@ struct ContentView: View {
             ZStack {
                 Color.black.ignoresSafeArea()
                 
+                // Carousel
                 ZStack {
                     ForEach(items.indices, id: \.self) { index in
                         let distance = clampedDistance(for: index, cardWidth: cardWidth)
@@ -53,7 +62,7 @@ struct ContentView: View {
                     }
                 }
                 .frame(height: cardHeight * 1.2)
-                .gesture(
+                .simultaneousGesture(
                     DragGesture()
                         .onChanged { value in
                             if dragStartTime == nil { dragStartTime = value.time }
@@ -67,8 +76,36 @@ struct ContentView: View {
                             isDragging = false
                         }
                 )
+                
+                // Debug button (invisible)
+                VStack {
+                    Spacer()
+                    Button(action: {
+                        withAnimation {
+                            showDebug.toggle()
+                        }
+                    }) {
+                        Rectangle()
+                            .fill(Color.black.opacity(0.001))
+                            .frame(width: 120, height: 60)
+                    }
+                    .padding(.bottom, 20)
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .sheet(isPresented: $showDebug) {
+                DebugMenu(
+                    spacing: $debugSpacing,
+                    maxAngle: $debugMaxAngle,
+                    velocityMultiplier: $debugVelocityMultiplier,
+                    animDuration: $debugAnimDuration
+                )
+            }
+        }
+        .onChange(of: currentIndex) { _, _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                recenterIndexIfNeeded()
+            }
         }
     }
     
@@ -84,40 +121,50 @@ struct ContentView: View {
             duration = 0.1
         }
         
-        // cards / second
+        // Реальная скорость жеста
         let velocityCardsPerSec = (translation / cardWidth) / duration
         
-        let dragComponent     = translation / cardWidth
-        let velocityComponent = velocityCardsPerSec * 0.3
+        // Добавляем к накопленной скорости (если свайпнули во время анимации)
+        let totalVelocity = velocityCardsPerSec + accumulatedVelocity
+        
+        let dragComponent = translation / cardWidth
+        
+        // Новая формула: один коэффициент, но большой
+        let velocityComponent = totalVelocity * debugVelocityMultiplier
         
         var rawStep = dragComponent + velocityComponent
-        rawStep = max(min(rawStep, 3), -3)          // ограничиваем
+        rawStep = max(min(rawStep, 30), -30)
         
         var step = Int(round(rawStep))
         
-        // если жест заметный, но округление даёт 0 — форсим +/-1, чтобы не встать на ту же
-        if step == 0 && abs(rawStep) > 0.35 {
-            step = rawStep > 0 ? 1 : -1
-        }
-        
-        // маленький «шорох» не меняет карточку вообще
-        if abs(rawStep) <= 0.35 {
+        // Порог для одной карточки: если медленно и не далеко → ровно 1
+        if abs(rawStep) < 0.6 {
             step = 0
+        } else if abs(rawStep) >= 0.6 && abs(rawStep) < 1.4 {
+            // Обычный свайп → 1 карточка
+            step = rawStep > 0 ? 1 : -1
         }
         
         let newIndex = (currentIndex - step)
             .clamped(to: 0...(items.count - 1))
         
-        let speed = max(0.1, abs(velocityCardsPerSec))
-        let extra = min(log(speed + 1) * 0.6, 0.9)
-        let durationAnim = 0.4 + extra
+        // Длительность: базовая + пропорционально количеству карточек
+        let cardsTraveled = abs(step)
+        let extraDuration = min(Double(cardsTraveled) * 0.25, 3.0)
+        let durationAnim = debugAnimDuration + extraDuration
         
-        withAnimation(.timingCurve(0.2, 0.95, 0.25, 1.0, duration: durationAnim)) {
+        // Сохраняем остаточную скорость на случай нового свайпа во время анимации
+        accumulatedVelocity = totalVelocity * 0.3
+        
+        withAnimation(.timingCurve(0.12, 0.9, 0.2, 1.0, duration: durationAnim)) {
             currentIndex = newIndex
-            dragOffset   = 0
+            dragOffset = 0
         }
         
-        recenterIndexIfNeeded()
+        // Сбрасываем накопленную скорость через время анимации
+        DispatchQueue.main.asyncAfter(deadline: .now() + durationAnim) {
+            accumulatedVelocity = 0
+        }
     }
     
     // MARK: - Geometry / Effects
@@ -125,27 +172,24 @@ struct ContentView: View {
     private func clampedDistance(for index: Int, cardWidth: CGFloat) -> CGFloat {
         let dragProgress = dragOffset / cardWidth
         let raw = CGFloat(index - currentIndex) + dragProgress
-        // сильный clamp, чтобы не было резких скачков scale/rotate у дальних карт
-        return min(max(raw, -2.2), 2.2)
+        return min(max(raw, -2.5), 2.5)
     }
     
     private func xOffset(for distance: CGFloat, cardWidth: CGFloat) -> CGFloat {
-        let spacing: CGFloat = cardWidth * 0.55
+        let spacing: CGFloat = cardWidth * debugSpacing
         return distance * spacing
     }
     
     private func scale(for distance: CGFloat) -> CGFloat {
-        let d = min(abs(distance), 2.2)
-        // гладкая кривая: 0 → 1.0, 1 → 0.8, 2.2 → ~0.45
-        let t = d / 2.2
-        return 1.0 - 0.55 * t          // линейно, без ступеней
+        let d = min(abs(distance), 2.5)
+        let t = d / 2.5
+        return 1.0 - 0.55 * t
     }
     
     private func rotation(for distance: CGFloat) -> Double {
-        let d = min(max(distance, -2.2), 2.2)
-        let t = d / 2.2
-        let maxAngle: Double = 80
-        return Double(t) * maxAngle
+        let d = min(max(distance, -2.5), 2.5)
+        let t = d / 2.5
+        return Double(t) * debugMaxAngle
     }
     
     private func zIndex(for distance: CGFloat) -> Double {
@@ -154,17 +198,13 @@ struct ContentView: View {
     
     private func opacity(for distance: CGFloat) -> Double {
         let d = Double(abs(distance))
+        let base = max(0.0, 1.0 - d * 0.4)
         
-        // базовая плавная кривая: 0 → 1, 2.2 → ~0.2
-        var base = max(0.0, 1.0 - d * 0.4)
-        
-        // третьи (d ~ 2): в покое 0, при скролле base
-        if d >= 1.5 && d <= 2.2 {
+        if d >= 1.5 && d <= 2.5 {
             return isDragging ? base : 0.0
         }
         
-        // дальше почти не видно
-        if d > 2.2 {
+        if d > 2.5 {
             return isDragging ? min(base, 0.08) : 0.0
         }
         
@@ -174,13 +214,81 @@ struct ContentView: View {
     private func recenterIndexIfNeeded() {
         let postersCount = posters.count
         let jump = (stackCount / 2) * postersCount
-        let lowerBound = postersCount
-        let upperBound = items.count - postersCount - 1
+        let lowerBound = postersCount * 2
+        let upperBound = items.count - postersCount * 2 - 1
         
         if currentIndex <= lowerBound {
-            currentIndex += jump
+            let newIdx = currentIndex + jump
+            if newIdx < items.count {
+                currentIndex = newIdx
+            }
         } else if currentIndex >= upperBound {
-            currentIndex -= jump
+            let newIdx = currentIndex - jump
+            if newIdx >= 0 {
+                currentIndex = newIdx
+            }
+        }
+    }
+}
+
+// MARK: - Debug Menu
+
+struct DebugMenu: View {
+    @Binding var spacing: CGFloat
+    @Binding var maxAngle: Double
+    @Binding var velocityMultiplier: CGFloat
+    @Binding var animDuration: Double
+    @Environment(\.dismiss) var dismiss
+    
+    var body: some View {
+        NavigationView {
+            Form {
+                Section("Carousel Settings") {
+                    VStack(alignment: .leading) {
+                        Text("Spacing: \(spacing, specifier: "%.2f")")
+                            .font(.caption)
+                        Slider(value: $spacing, in: 0.3...0.8, step: 0.01)
+                    }
+                    
+                    VStack(alignment: .leading) {
+                        Text("Max Angle: \(maxAngle, specifier: "%.0f")°")
+                            .font(.caption)
+                        Slider(value: $maxAngle, in: 30...120, step: 1)
+                    }
+                }
+                
+                Section("Animation") {
+                    VStack(alignment: .leading) {
+                        Text("Velocity Multiplier: \(velocityMultiplier, specifier: "%.1f")")
+                            .font(.caption)
+                        Slider(value: $velocityMultiplier, in: 0.3...3.0, step: 0.1)
+                    }
+                    
+                    VStack(alignment: .leading) {
+                        Text("Base Duration: \(animDuration, specifier: "%.2f")s")
+                            .font(.caption)
+                        Slider(value: $animDuration, in: 0.2...1.5, step: 0.05)
+                    }
+                }
+                
+                Section {
+                    Button("Reset to Defaults") {
+                        spacing = 0.55
+                        maxAngle = 80
+                        velocityMultiplier = 1.2
+                        animDuration = 0.5
+                    }
+                }
+            }
+            .navigationTitle("Debug Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
         }
     }
 }
