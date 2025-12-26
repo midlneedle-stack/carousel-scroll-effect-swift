@@ -5,7 +5,11 @@ struct ContentView: View {
         "Instagram post - 54",
         "Instagram post - 55",
         "Instagram post - 56",
-        "Instagram post - 58"
+        "Instagram post - 58",
+        "Instagram post - 663",
+        "Instagram post - 664",
+        "Instagram post - 665",
+        "Instagram post - 666"
     ]
     
     private let stackCount = 12
@@ -17,6 +21,7 @@ struct ContentView: View {
     @State private var dragStartTime: Date?
     @State private var isDragging = false
     @State private var accumulatedVelocity: CGFloat = 0  // накопленная скорость
+    @State private var isAnimating = false  // флаг активной анимации
     
     // Debug parameters
     @State private var showDebug = false
@@ -40,58 +45,81 @@ struct ContentView: View {
             let cardWidth   = totalWidth * visibleCardWidthRatio
             let cardHeight  = cardWidth
             
-            ZStack {
-                Color.black.ignoresSafeArea()
-                
-                // Carousel
+            GeometryReader { geoProxy in
                 ZStack {
-                    ForEach(items.indices, id: \.self) { index in
-                        let distance = clampedDistance(for: index, cardWidth: cardWidth)
-                        
-                        PosterCard(imageName: items[index], size: cardWidth)
-                            .scaleEffect(scale(for: distance))
-                            .rotation3DEffect(
-                                .degrees(rotation(for: distance)),
-                                axis: (x: 0, y: 1, z: 0),
-                                anchor: .center,
-                                perspective: 0.7
-                            )
-                            .offset(x: xOffset(for: distance, cardWidth: cardWidth))
-                            .zIndex(zIndex(for: distance))
-                            .opacity(opacity(for: distance))
+                    Color.black.ignoresSafeArea()
+
+                    VStack(spacing: 0) {
+                        // Debug button at top (invisible)
+                        Button(action: {
+                            withAnimation {
+                                showDebug.toggle()
+                            }
+                        }) {
+                            Rectangle()
+                                .fill(Color.black.opacity(0.001))
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 60)
+                        }
+
+                        Spacer()
+
+                        // Carousel - centered
+                        ZStack {
+                            ForEach(items.indices, id: \.self) { index in
+                                let distance = clampedDistance(for: index, cardWidth: cardWidth)
+
+                                PosterCard(imageName: items[index], size: cardWidth)
+                                    .scaleEffect(scale(for: distance))
+                                    .rotation3DEffect(
+                                        .degrees(rotation(for: distance)),
+                                        axis: (x: 0, y: 1, z: 0),
+                                        anchor: .center,
+                                        perspective: 0.7
+                                    )
+                                    .offset(x: xOffset(for: distance, cardWidth: cardWidth))
+                                    .zIndex(zIndex(for: distance))
+                                    .opacity(opacity(for: distance))
+                            }
+                        }
+                        .frame(height: cardHeight * 1.2)
+                        .simultaneousGesture(
+                            DragGesture(minimumDistance: 0)
+                                .onChanged { value in
+                                    if dragStartTime == nil {
+                                        dragStartTime = value.time
+                                        // НЕ сбрасываем accumulatedVelocity если анимация идет
+                                        if !isAnimating {
+                                            accumulatedVelocity = 0
+                                        }
+                                    }
+                                    if !isDragging { isDragging = true }
+
+                                    // Плавное начало драга
+                                    withAnimation(.interactiveSpring(response: 0.25, dampingFraction: 1.0)) {
+                                        dragOffset = value.translation.width
+                                    }
+                                }
+                                .onEnded { value in
+                                    let cardWidth = proxy.size.width * visibleCardWidthRatio
+                                    handleDragEnd(value, cardWidth: cardWidth)
+                                    dragStartTime = nil
+                                    isDragging = false
+                                }
+                        )
+
+                        Spacer()
+
+                        // iPod-style scroll wheel at bottom
+                        iPodScrollWheel(onScroll: { direction in
+                            scrollCard(direction: direction)
+                        })
+                        .frame(width: 180, height: 180)
+                        .padding(.bottom, geoProxy.safeAreaInsets.bottom + 20)
                     }
-                }
-                .frame(height: cardHeight * 1.2)
-                .simultaneousGesture(
-                    DragGesture()
-                        .onChanged { value in
-                            if dragStartTime == nil { dragStartTime = value.time }
-                            if !isDragging { isDragging = true }
-                            dragOffset = value.translation.width
-                        }
-                        .onEnded { value in
-                            let cardWidth = proxy.size.width * visibleCardWidthRatio
-                            handleDragEnd(value, cardWidth: cardWidth)
-                            dragStartTime = nil
-                            isDragging = false
-                        }
-                )
-                
-                // Debug button (invisible)
-                VStack {
-                    Spacer()
-                    Button(action: {
-                        withAnimation {
-                            showDebug.toggle()
-                        }
-                    }) {
-                        Rectangle()
-                            .fill(Color.black.opacity(0.001))
-                            .frame(width: 120, height: 60)
-                    }
-                    .padding(.bottom, 20)
                 }
             }
+            .ignoresSafeArea()
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .sheet(isPresented: $showDebug) {
                 DebugMenu(
@@ -109,8 +137,19 @@ struct ContentView: View {
         }
     }
     
+    // MARK: - Scroll handling
+
+    private func scrollCard(direction: ScrollDirection) {
+        let step = direction == .forward ? 1 : -1
+        let newIndex = (currentIndex + step).clamped(to: 0...(items.count - 1))
+
+        withAnimation(.timingCurve(0.12, 0.9, 0.2, 1.0, duration: 0.35)) {
+            currentIndex = newIndex
+        }
+    }
+
     // MARK: - Drag handling
-    
+
     private func handleDragEnd(_ value: DragGesture.Value, cardWidth: CGFloat) {
         let translation = value.translation.width
         
@@ -128,21 +167,20 @@ struct ContentView: View {
         let totalVelocity = velocityCardsPerSec + accumulatedVelocity
         
         let dragComponent = translation / cardWidth
-        
-        // Новая формула: один коэффициент, но большой
+
+        // Новая формула: динамическая скорость
         let velocityComponent = totalVelocity * debugVelocityMultiplier
-        
+
         var rawStep = dragComponent + velocityComponent
+
+        // Ограничиваем максимум, но даем больше свободы
         rawStep = max(min(rawStep, 30), -30)
-        
+
         var step = Int(round(rawStep))
-        
-        // Порог для одной карточки: если медленно и не далеко → ровно 1
-        if abs(rawStep) < 0.6 {
+
+        // Минимальный порог для движения
+        if abs(rawStep) < 0.3 {
             step = 0
-        } else if abs(rawStep) >= 0.6 && abs(rawStep) < 1.4 {
-            // Обычный свайп → 1 карточка
-            step = rawStep > 0 ? 1 : -1
         }
         
         let newIndex = (currentIndex - step)
@@ -155,15 +193,21 @@ struct ContentView: View {
         
         // Сохраняем остаточную скорость на случай нового свайпа во время анимации
         accumulatedVelocity = totalVelocity * 0.3
-        
+
+        // Устанавливаем флаг анимации
+        isAnimating = true
+
+        // Сбрасываем dragOffset БЕЗ анимации
+        dragOffset = 0
+
         withAnimation(.timingCurve(0.12, 0.9, 0.2, 1.0, duration: durationAnim)) {
             currentIndex = newIndex
-            dragOffset = 0
         }
-        
-        // Сбрасываем накопленную скорость через время анимации
+
+        // Сбрасываем накопленную скорость и флаг анимации через время анимации
         DispatchQueue.main.asyncAfter(deadline: .now() + durationAnim) {
             accumulatedVelocity = 0
+            isAnimating = false
         }
     }
     
@@ -174,10 +218,12 @@ struct ContentView: View {
         let raw = CGFloat(index - currentIndex) + dragProgress
         return min(max(raw, -2.5), 2.5)
     }
-    
+
     private func xOffset(for distance: CGFloat, cardWidth: CGFloat) -> CGFloat {
         let spacing: CGFloat = cardWidth * debugSpacing
-        return distance * spacing
+        // Ограничиваем offset для дальних карточек
+        let clampedDist = min(max(distance, -1.5), 1.5)
+        return clampedDist * spacing
     }
     
     private func scale(for distance: CGFloat) -> CGFloat {
@@ -199,15 +245,19 @@ struct ContentView: View {
     private func opacity(for distance: CGFloat) -> Double {
         let d = Double(abs(distance))
         let base = max(0.0, 1.0 - d * 0.4)
-        
-        if d >= 1.5 && d <= 2.5 {
-            return isDragging ? base : 0.0
+
+        // Плавное затухание для карточек от 1.5 и дальше
+        if d >= 1.5 {
+            if d >= 2.0 {
+                // Третьи карточки (d >= 2.0) полностью прозрачны
+                return 0.0
+            } else {
+                // От 1.5 до 2.0 - плавное затухание
+                let fadeProgress = (2.0 - d) / 0.5
+                return base * fadeProgress
+            }
         }
-        
-        if d > 2.5 {
-            return isDragging ? min(base, 0.08) : 0.0
-        }
-        
+
         return base
     }
     
@@ -295,9 +345,85 @@ struct DebugMenu: View {
 
 // MARK: - Helpers
 
+enum ScrollDirection {
+    case forward
+    case backward
+}
+
 private extension Comparable {
     func clamped(to range: ClosedRange<Self>) -> Self {
         min(max(self, range.lowerBound), range.upperBound)
+    }
+}
+
+// MARK: - iPod Scroll Wheel
+
+struct iPodScrollWheel: View {
+    let onScroll: (ScrollDirection) -> Void
+    @State private var lastAngle: CGFloat = 0
+    @State private var counter: CGFloat = 0
+    @State private var isScrolling = false
+    @State private var strokeOpacity: Double = 0.0
+
+    var body: some View {
+        GeometryReader { geometry in
+            let size = min(geometry.size.width, geometry.size.height)
+
+            ZStack {
+                // Visible stroke when scrolling
+                Circle()
+                    .stroke(Color.white.opacity(strokeOpacity), lineWidth: 60)
+                    .frame(width: size, height: size)
+                    .animation(.easeInOut(duration: 0.6), value: strokeOpacity)
+
+                // Invisible scroll area
+                Circle()
+                    .fill(Color.white.opacity(0.001))
+                    .frame(width: size, height: size)
+                    .gesture(dragGesture(in: size))
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private func dragGesture(in size: CGFloat) -> some Gesture {
+        DragGesture()
+            .onChanged { value in
+                // Show stroke when scrolling starts
+                if !isScrolling {
+                    isScrolling = true
+                    withAnimation(.easeIn(duration: 0.4)) {
+                        strokeOpacity = 0.05
+                    }
+                }
+
+                let center = size * 0.5
+                var angle = atan2(value.location.x - center, center - value.location.y) * 180 / .pi
+                if angle < 0 { angle += 360 }
+
+                let theta = lastAngle - angle
+                lastAngle = angle
+
+                if abs(theta) < 30 { counter += theta }
+
+                if counter > 30 {
+                    onScroll(.backward)
+                    counter = 0
+                } else if counter < -30 {
+                    onScroll(.forward)
+                    counter = 0
+                }
+            }
+            .onEnded { _ in
+                counter = 0
+                lastAngle = 0
+                isScrolling = false
+
+                // Hide stroke when scrolling ends
+                withAnimation(.easeOut(duration: 0.6)) {
+                    strokeOpacity = 0.0
+                }
+            }
     }
 }
 
