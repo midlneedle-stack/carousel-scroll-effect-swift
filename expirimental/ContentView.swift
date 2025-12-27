@@ -71,10 +71,13 @@ struct ContentView: View {
     @State private var debugWheelStrokeGradientEnabled: Bool = true
     @State private var debugWheelFillGradientOpacity: Double = 0.1
     @State private var debugWheelStrokeGradientOpacity: Double = 0.2
+    @State private var debugWheelUnidirectionalGradient: Bool = false
     @State private var debugGlassBorderEnabled: Bool = true
     @State private var debugGlassStrokeWidth: CGFloat = 1.0
     @State private var debugGlassStrokeOpacity: Double = 0.1
     @State private var debugGlassGradientOpacity: Double = 0.2
+    @State private var debugGlassUnidirectionalGradient: Bool = false
+    @State private var debugGlassOverlayOpacity: Double = 0.1
     private let glassRadius: CGFloat = 0
 
     @StateObject private var motionManager = MotionManager()
@@ -126,6 +129,8 @@ struct ContentView: View {
                                 glassStrokeOpacity: debugGlassStrokeOpacity,
                                 glassGradientOpacity: debugGlassGradientOpacity,
                                 glassRadius: glassRadius,
+                                glassUnidirectionalGradient: debugGlassUnidirectionalGradient,
+                                glassOverlayOpacity: debugGlassOverlayOpacity,
                                 tiltX: isCenterCard ? motionManager.tiltX : 0,
                                 tiltY: isCenterCard ? motionManager.tiltY : 0,
                                 distance: distance
@@ -177,6 +182,7 @@ struct ContentView: View {
                         strokeGradientEnabled: debugWheelStrokeGradientEnabled,
                         fillGradientOpacity: debugWheelFillGradientOpacity,
                         strokeGradientOpacity: debugWheelStrokeGradientOpacity,
+                        unidirectionalGradient: debugWheelUnidirectionalGradient,
                         onScroll: { direction in
                             scrollCard(direction: direction)
                         }
@@ -198,10 +204,13 @@ struct ContentView: View {
                     wheelStrokeGradientEnabled: $debugWheelStrokeGradientEnabled,
                     wheelFillGradientOpacity: $debugWheelFillGradientOpacity,
                     wheelStrokeGradientOpacity: $debugWheelStrokeGradientOpacity,
+                    wheelUnidirectionalGradient: $debugWheelUnidirectionalGradient,
                     glassBorderEnabled: $debugGlassBorderEnabled,
                     glassStrokeWidth: $debugGlassStrokeWidth,
                     glassStrokeOpacity: $debugGlassStrokeOpacity,
-                    glassGradientOpacity: $debugGlassGradientOpacity
+                    glassGradientOpacity: $debugGlassGradientOpacity,
+                    glassUnidirectionalGradient: $debugGlassUnidirectionalGradient,
+                    glassOverlayOpacity: $debugGlassOverlayOpacity
                 )
             }
         }
@@ -371,10 +380,13 @@ struct DebugMenu: View {
     @Binding var wheelStrokeGradientEnabled: Bool
     @Binding var wheelFillGradientOpacity: Double
     @Binding var wheelStrokeGradientOpacity: Double
+    @Binding var wheelUnidirectionalGradient: Bool
     @Binding var glassBorderEnabled: Bool
     @Binding var glassStrokeWidth: CGFloat
     @Binding var glassStrokeOpacity: Double
     @Binding var glassGradientOpacity: Double
+    @Binding var glassUnidirectionalGradient: Bool
+    @Binding var glassOverlayOpacity: Double
     @Environment(\.dismiss) var dismiss
 
     var body: some View {
@@ -392,8 +404,10 @@ struct DebugMenu: View {
                             .font(.caption)
                         Slider(value: $wheelBottomPadding, in: 0...300, step: 5)
                     }
+                }
 
-                    Toggle("Wheel Fill Gradient", isOn: $wheelFillGradientEnabled)
+                Section("Scroll Wheel") {
+                    Toggle("Fill Gradient", isOn: $wheelFillGradientEnabled)
 
                     if wheelFillGradientEnabled {
                         VStack(alignment: .leading) {
@@ -403,7 +417,7 @@ struct DebugMenu: View {
                         }
                     }
 
-                    Toggle("Wheel Stroke Gradient", isOn: $wheelStrokeGradientEnabled)
+                    Toggle("Stroke Gradient", isOn: $wheelStrokeGradientEnabled)
 
                     if wheelStrokeGradientEnabled {
                         VStack(alignment: .leading) {
@@ -412,31 +426,45 @@ struct DebugMenu: View {
                             Slider(value: $wheelStrokeGradientOpacity, in: 0.0...1.0, step: 0.05)
                         }
                     }
+                }
 
-                    Toggle("Glass Border", isOn: $glassBorderEnabled)
+                Section("Glass Border") {
+                    Toggle("Enabled", isOn: $glassBorderEnabled)
 
                     if glassBorderEnabled {
                         VStack(alignment: .leading) {
-                            Text("Glass Stroke Width: \(glassStrokeWidth, specifier: "%.1f")pt")
-                                .font(.caption)
-                            Slider(value: $glassStrokeWidth, in: 0.5...3.0, step: 0.5)
-                        }
-
-                        VStack(alignment: .leading) {
-                            Text("Glass Stroke Opacity: \(glassStrokeOpacity, specifier: "%.2f")")
+                            Text("Stroke Opacity: \(glassStrokeOpacity, specifier: "%.2f")")
                                 .font(.caption)
                             Slider(value: $glassStrokeOpacity, in: 0.0...0.5, step: 0.05)
                         }
 
                         VStack(alignment: .leading) {
-                            Text("Glass Gradient Opacity: \(glassGradientOpacity, specifier: "%.2f")")
+                            Text("Gradient Opacity: \(glassGradientOpacity, specifier: "%.2f")")
                                 .font(.caption)
                             Slider(value: $glassGradientOpacity, in: 0.0...1.0, step: 0.05)
                         }
                     }
                 }
 
-                Section("Carousel Settings") {
+                Section("Gradients") {
+                    Toggle("Unidirectional Mode", isOn: Binding(
+                        get: { glassUnidirectionalGradient },
+                        set: { newValue in
+                            glassUnidirectionalGradient = newValue
+                            wheelUnidirectionalGradient = newValue
+                        }
+                    ))
+
+                    if glassUnidirectionalGradient {
+                        VStack(alignment: .leading) {
+                            Text("Card Overlay Opacity: \(glassOverlayOpacity, specifier: "%.2f")")
+                                .font(.caption)
+                            Slider(value: $glassOverlayOpacity, in: 0.0...1.0, step: 0.05)
+                        }
+                    }
+                }
+
+                Section("Carousel") {
                     VStack(alignment: .leading) {
                         Text("Spacing: \(spacing, specifier: "%.2f")")
                             .font(.caption)
@@ -476,10 +504,13 @@ struct DebugMenu: View {
                         wheelStrokeGradientEnabled = true
                         wheelFillGradientOpacity = 0.1
                         wheelStrokeGradientOpacity = 0.2
+                        wheelUnidirectionalGradient = false
                         glassBorderEnabled = true
                         glassStrokeWidth = 1.0
                         glassStrokeOpacity = 0.1
                         glassGradientOpacity = 0.2
+                        glassUnidirectionalGradient = false
+                        glassOverlayOpacity = 0.1
                     }
                 }
             }
@@ -516,6 +547,7 @@ struct iPodScrollWheel: View {
     let strokeGradientEnabled: Bool
     let fillGradientOpacity: Double
     let strokeGradientOpacity: Double
+    let unidirectionalGradient: Bool
     let onScroll: (ScrollDirection) -> Void
     @State private var lastAngle: CGFloat = 0
     @State private var counter: CGFloat = 0
@@ -546,7 +578,10 @@ struct iPodScrollWheel: View {
                     Circle()
                         .strokeBorder(
                             LinearGradient(
-                                gradient: Gradient(stops: [
+                                gradient: Gradient(stops: unidirectionalGradient ? [
+                                    .init(color: Color.white.opacity(0), location: 0.0),
+                                    .init(color: Color.white.opacity(strokeGradientOpacity), location: 1.0)
+                                ] : [
                                     .init(color: Color.white.opacity(0), location: 0.0),
                                     .init(color: Color.white.opacity(strokeGradientOpacity), location: 0.5),
                                     .init(color: Color.white.opacity(0), location: 1.0)
@@ -654,9 +689,20 @@ private struct PosterCard: View {
     let glassStrokeOpacity: Double
     let glassGradientOpacity: Double
     let glassRadius: CGFloat
+    let glassUnidirectionalGradient: Bool
+    let glassOverlayOpacity: Double
     let tiltX: Double
     let tiltY: Double
     let distance: CGFloat
+
+    var gradientAngle: Double {
+        let angle = atan2(tiltY, tiltX) * 180 / .pi
+        return angle + 90
+    }
+
+    var gradientEffectOpacity: Double {
+        return 1.0 - min(abs(distance), 1.0)
+    }
 
     var body: some View {
         Image(imageName)
@@ -671,10 +717,37 @@ private struct PosterCard: View {
                             strokeWidth: glassStrokeWidth,
                             strokeOpacity: glassStrokeOpacity,
                             gradientOpacity: glassGradientOpacity,
+                            unidirectionalGradient: glassUnidirectionalGradient,
                             tiltX: tiltX,
                             tiltY: tiltY,
                             distance: distance
                         )
+                    }
+                }
+            )
+            .overlay(
+                Group {
+                    if glassBorderEnabled && glassUnidirectionalGradient {
+                        RoundedRectangle(cornerRadius: glassRadius)
+                            .fill(
+                                LinearGradient(
+                                    gradient: Gradient(stops: [
+                                        .init(color: .white.opacity(0), location: 0.0),
+                                        .init(color: .white.opacity(glassOverlayOpacity * gradientEffectOpacity), location: 1.0)
+                                    ]),
+                                    startPoint: .init(
+                                        x: 0.5 + 0.5 * cos(gradientAngle * .pi / 180),
+                                        y: 0.5 + 0.5 * sin(gradientAngle * .pi / 180)
+                                    ),
+                                    endPoint: .init(
+                                        x: 0.5 - 0.5 * cos(gradientAngle * .pi / 180),
+                                        y: 0.5 - 0.5 * sin(gradientAngle * .pi / 180)
+                                    )
+                                )
+                            )
+                            .animation(.easeOut(duration: 0.6), value: gradientAngle)
+                            .animation(.easeInOut(duration: 0.3), value: distance)
+                            .allowsHitTesting(false)
                     }
                 }
             )
@@ -687,6 +760,7 @@ struct GlassBorderEffect: View {
     let strokeWidth: CGFloat
     let strokeOpacity: Double
     let gradientOpacity: Double
+    let unidirectionalGradient: Bool
     let tiltX: Double
     let tiltY: Double
     let distance: CGFloat
@@ -712,7 +786,10 @@ struct GlassBorderEffect: View {
             RoundedRectangle(cornerRadius: cornerRadius)
                 .strokeBorder(
                     LinearGradient(
-                        gradient: Gradient(stops: [
+                        gradient: Gradient(stops: unidirectionalGradient ? [
+                            .init(color: .white.opacity(0), location: 0.0),
+                            .init(color: .white.opacity(gradientOpacity * gradientEffectOpacity), location: 1.0)
+                        ] : [
                             .init(color: .white.opacity(0), location: 0.0),
                             .init(color: .white.opacity(gradientOpacity * gradientEffectOpacity), location: 0.5),
                             .init(color: .white.opacity(0), location: 1.0)
