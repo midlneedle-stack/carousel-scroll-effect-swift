@@ -72,6 +72,7 @@ struct ContentView: View {
     @State private var debugWheelFillGradientOpacity: Double = 0.1
     @State private var debugWheelStrokeGradientOpacity: Double = 0.2
     @State private var debugWheelUnidirectionalGradient: Bool = false
+    @State private var debugWheelFadeEnabled: Bool = true
     @State private var debugGlassBorderEnabled: Bool = true
     @State private var debugGlassStrokeWidth: CGFloat = 1.0
     @State private var debugGlassStrokeOpacity: Double = 0.1
@@ -197,6 +198,7 @@ struct ContentView: View {
                         fillGradientOpacity: debugWheelFillGradientOpacity,
                         strokeGradientOpacity: debugWheelStrokeGradientOpacity,
                         unidirectionalGradient: debugWheelUnidirectionalGradient,
+                        fadeEnabled: debugWheelFadeEnabled,
                         onScroll: { direction in
                             scrollCard(direction: direction)
                         }
@@ -219,6 +221,7 @@ struct ContentView: View {
                     wheelFillGradientOpacity: $debugWheelFillGradientOpacity,
                     wheelStrokeGradientOpacity: $debugWheelStrokeGradientOpacity,
                     wheelUnidirectionalGradient: $debugWheelUnidirectionalGradient,
+                    wheelFadeEnabled: $debugWheelFadeEnabled,
                     glassBorderEnabled: $debugGlassBorderEnabled,
                     glassStrokeWidth: $debugGlassStrokeWidth,
                     glassStrokeOpacity: $debugGlassStrokeOpacity,
@@ -246,6 +249,10 @@ struct ContentView: View {
     private func scrollCard(direction: ScrollDirection) {
         let step = direction == .forward ? 1 : -1
         let newIndex = (currentIndex + step).clamped(to: 0...(items.count - 1))
+
+        // Haptic feedback
+        let impact = UIImpactFeedbackGenerator(style: .light)
+        impact.impactOccurred()
 
         withAnimation(.timingCurve(0.12, 0.9, 0.2, 1.0, duration: 0.35)) {
             currentIndex = newIndex
@@ -289,12 +296,18 @@ struct ContentView: View {
         
         let newIndex = (currentIndex - step)
             .clamped(to: 0...(items.count - 1))
-        
+
+        // Haptic feedback if cards changed
+        if step != 0 {
+            let impact = UIImpactFeedbackGenerator(style: .light)
+            impact.impactOccurred()
+        }
+
         // Длительность: базовая + пропорционально количеству карточек
         let cardsTraveled = abs(step)
         let extraDuration = min(Double(cardsTraveled) * 0.25, 3.0)
         let durationAnim = debugAnimDuration + extraDuration
-        
+
         // Сохраняем остаточную скорость на случай нового свайпа во время анимации
         accumulatedVelocity = totalVelocity * 0.3
 
@@ -401,6 +414,7 @@ struct DebugMenu: View {
     @Binding var wheelFillGradientOpacity: Double
     @Binding var wheelStrokeGradientOpacity: Double
     @Binding var wheelUnidirectionalGradient: Bool
+    @Binding var wheelFadeEnabled: Bool
     @Binding var glassBorderEnabled: Bool
     @Binding var glassStrokeWidth: CGFloat
     @Binding var glassStrokeOpacity: Double
@@ -433,6 +447,8 @@ struct DebugMenu: View {
                 }
 
                 Section("Scroll Wheel") {
+                    Toggle("Fade Effect", isOn: $wheelFadeEnabled)
+
                     Toggle("Fill Gradient", isOn: $wheelFillGradientEnabled)
 
                     if wheelFillGradientEnabled {
@@ -561,6 +577,7 @@ struct DebugMenu: View {
                         wheelFillGradientOpacity = 0.1
                         wheelStrokeGradientOpacity = 0.2
                         wheelUnidirectionalGradient = false
+                        wheelFadeEnabled = true
                         glassBorderEnabled = true
                         glassStrokeWidth = 1.0
                         glassStrokeOpacity = 0.1
@@ -610,6 +627,7 @@ struct iPodScrollWheel: View {
     let fillGradientOpacity: Double
     let strokeGradientOpacity: Double
     let unidirectionalGradient: Bool
+    let fadeEnabled: Bool
     let onScroll: (ScrollDirection) -> Void
     @State private var lastAngle: CGFloat = 0
     @State private var counter: CGFloat = 0
@@ -629,11 +647,11 @@ struct iPodScrollWheel: View {
                 // Base stroke - only visible when scrolling, opacity depends on fillOpacity
                 Circle()
                     .strokeBorder(
-                        Color.white.opacity(wheelStrokeOpacity * (fillOpacity / 0.1)),
+                        Color.white.opacity(wheelStrokeOpacity * (fadeEnabled ? (fillOpacity / 0.1) : 1.0)),
                         lineWidth: wheelStrokeWidth
                     )
                     .frame(width: size, height: size)
-                    .animation(.easeInOut(duration: 0.6), value: fillOpacity)
+                    .animation(fadeEnabled ? .easeInOut(duration: 0.6) : .none, value: fillOpacity)
 
                 // Stroke gradient - follows finger when scrolling
                 if strokeGradientEnabled {
@@ -656,16 +674,16 @@ struct iPodScrollWheel: View {
                             lineWidth: wheelStrokeWidth
                         )
                         .frame(width: size, height: size)
-                        .opacity(isScrolling ? 1.0 : 0.0)
-                        .animation(.easeOut(duration: 0.3), value: isScrolling)
+                        .opacity(fadeEnabled ? (isScrolling ? 1.0 : 0.0) : 1.0)
+                        .animation(fadeEnabled ? .easeOut(duration: 0.3) : .none, value: isScrolling)
                         .allowsHitTesting(false)
                 }
 
                 // Base fill when scrolling
                 Circle()
-                    .fill(Color.white.opacity(fillOpacity))
+                    .fill(Color.white.opacity(fadeEnabled ? fillOpacity : 0.1))
                     .frame(width: size, height: size)
-                    .animation(.easeInOut(duration: 0.6), value: fillOpacity)
+                    .animation(fadeEnabled ? .easeInOut(duration: 0.6) : .none, value: fillOpacity)
                     .allowsHitTesting(false)
 
                 // Fill gradient following finger
@@ -675,7 +693,7 @@ struct iPodScrollWheel: View {
                             LinearGradient(
                                 gradient: Gradient(stops: [
                                     .init(color: Color.white.opacity(0), location: 0.0),
-                                    .init(color: Color.white.opacity(fillGradientOpacity * fillOpacity / 0.1), location: 1.0)
+                                    .init(color: Color.white.opacity(fillGradientOpacity * (fadeEnabled ? (fillOpacity / 0.1) : 1.0)), location: 1.0)
                                 ]),
                                 startPoint: .init(x: 0.5 + 0.5 * cos(touchAngle * .pi / 180),
                                                 y: 0.5 + 0.5 * sin(touchAngle * .pi / 180)),
@@ -684,8 +702,8 @@ struct iPodScrollWheel: View {
                             )
                         )
                         .frame(width: size, height: size)
-                        .opacity(isScrolling ? 1.0 : 0.0)
-                        .animation(.easeOut(duration: 0.3), value: isScrolling)
+                        .opacity(fadeEnabled ? (isScrolling ? 1.0 : 0.0) : 1.0)
+                        .animation(fadeEnabled ? .easeOut(duration: 0.3) : .none, value: isScrolling)
                         .allowsHitTesting(false)
                 }
 
@@ -705,13 +723,17 @@ struct iPodScrollWheel: View {
                 // Show fill when scrolling starts
                 if !isScrolling {
                     isScrolling = true
-                    withAnimation(.easeIn(duration: 0.4)) {
-                        fillOpacity = 0.1
+                    if fadeEnabled {
+                        withAnimation(.easeIn(duration: 0.4)) {
+                            fillOpacity = 0.1
+                        }
                     }
                 }
 
                 let center = size * 0.5
-                var angle = atan2(value.location.x - center, center - value.location.y) * 180 / .pi
+                let dx = value.location.x - center
+                let dy = value.location.y - center
+                var angle = atan2(dy, dx) * 180 / .pi
                 if angle < 0 { angle += 360 }
 
                 // Update touch angle for gradient
@@ -735,9 +757,11 @@ struct iPodScrollWheel: View {
                 lastAngle = 0
                 isScrolling = false
 
-                // Hide fill when scrolling ends
-                withAnimation(.easeOut(duration: 0.6)) {
-                    fillOpacity = 0.0
+                // Hide fill when scrolling ends (only if fade enabled)
+                if fadeEnabled {
+                    withAnimation(.easeOut(duration: 0.6)) {
+                        fillOpacity = 0.0
+                    }
                 }
             }
     }
@@ -794,20 +818,22 @@ private struct PosterCard: View {
                             .fill(
                                 LinearGradient(
                                     gradient: Gradient(stops: [
-                                        .init(color: .white.opacity(0), location: 0.5),
-                                        .init(color: .white.opacity(glassOverlayOpacity * gradientEffectOpacity), location: 1.0)
+                                        .init(color: .white.opacity(0), location: 0.0),
+                                        .init(color: .white.opacity(glassOverlayOpacity * gradientEffectOpacity), location: 0.5),
+                                        .init(color: .white.opacity(0), location: 1.0)
                                     ]),
                                     startPoint: .init(
-                                        x: 0.5 + 0.5 * cos(gradientAngle * .pi / 180),
-                                        y: 0.5 + 0.5 * sin(gradientAngle * .pi / 180)
+                                        x: 0.5 - tiltX * 0.5,
+                                        y: 0.5 - tiltY * 0.5
                                     ),
                                     endPoint: .init(
-                                        x: 0.5 - 0.5 * cos(gradientAngle * .pi / 180),
-                                        y: 0.5 - 0.5 * sin(gradientAngle * .pi / 180)
+                                        x: 0.5 + tiltX * 0.5,
+                                        y: 0.5 + tiltY * 0.5
                                     )
                                 )
                             )
-                            .animation(.easeOut(duration: 0.6), value: gradientAngle)
+                            .animation(.easeOut(duration: 0.6), value: tiltX)
+                            .animation(.easeOut(duration: 0.6), value: tiltY)
                             .animation(.easeInOut(duration: 0.3), value: distance)
                             .allowsHitTesting(false)
                     }
