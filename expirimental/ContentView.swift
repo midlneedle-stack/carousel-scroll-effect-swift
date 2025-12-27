@@ -67,24 +67,24 @@ struct ContentView: View {
     @State private var debugAnimDuration: Double = 1.5
     @State private var debugCarouselOffset: CGFloat = -60
     @State private var debugWheelBottomPadding: CGFloat = 100
-    @State private var debugWheelFillGradientEnabled: Bool = false
+    @State private var debugWheelFillGradientEnabled: Bool = true
     @State private var debugWheelStrokeGradientEnabled: Bool = true
     @State private var debugWheelFillGradientOpacity: Double = 0.1
     @State private var debugWheelStrokeGradientOpacity: Double = 0.2
     @State private var debugWheelUnidirectionalGradient: Bool = false
-    @State private var debugWheelFadeEnabled: Bool = true
+    @State private var debugWheelFadeEnabled: Bool = false
     @State private var debugGlassBorderEnabled: Bool = true
     @State private var debugGlassStrokeWidth: CGFloat = 1.0
     @State private var debugGlassStrokeOpacity: Double = 0.1
     @State private var debugGlassGradientOpacity: Double = 0.2
     @State private var debugGlassUnidirectionalGradient: Bool = false
     @State private var debugGlassOverlayOpacity: Double = 0.1
-    @State private var debugParallaxEnabled: Bool = false
-    @State private var debugParallaxAmount: Double = 20.0
-    @State private var debugCenterParallaxEnabled: Bool = false
-    @State private var debugCenterParallaxAmount: Double = 30.0
-    @State private var debugParallaxRotationEnabled: Bool = false
-    @State private var debugParallaxRotationAmount: Double = 5.0
+    @State private var debugParallaxEnabled: Bool = true
+    @State private var debugParallaxAmount: Double = 5.0
+    @State private var debugCenterParallaxEnabled: Bool = true
+    @State private var debugCenterParallaxAmount: Double = 10.0
+    @State private var debugParallaxRotationEnabled: Bool = true
+    @State private var debugParallaxRotationAmount: Double = 6.0
     private let glassRadius: CGFloat = 0
 
     @StateObject private var motionManager = MotionManager()
@@ -144,7 +144,7 @@ struct ContentView: View {
                             )
                             .scaleEffect(scale(for: distance))
                             .rotation3DEffect(
-                                .degrees(rotation(for: distance) + (debugParallaxRotationEnabled ? motionManager.tiltX * debugParallaxRotationAmount : 0)),
+                                .degrees(rotation(for: distance) + (debugParallaxRotationEnabled ? -motionManager.tiltX * debugParallaxRotationAmount : 0)),
                                 axis: (x: 0, y: 1, z: 0),
                                 anchor: .center,
                                 perspective: 0.7
@@ -199,6 +199,8 @@ struct ContentView: View {
                         strokeGradientOpacity: debugWheelStrokeGradientOpacity,
                         unidirectionalGradient: debugWheelUnidirectionalGradient,
                         fadeEnabled: debugWheelFadeEnabled,
+                        tiltX: motionManager.tiltX,
+                        tiltY: motionManager.tiltY,
                         onScroll: { direction in
                             scrollCard(direction: direction)
                         }
@@ -572,24 +574,24 @@ struct DebugMenu: View {
                         animDuration = 1.5
                         carouselOffset = -60
                         wheelBottomPadding = 100
-                        wheelFillGradientEnabled = false
+                        wheelFillGradientEnabled = true
                         wheelStrokeGradientEnabled = true
                         wheelFillGradientOpacity = 0.1
                         wheelStrokeGradientOpacity = 0.2
                         wheelUnidirectionalGradient = false
-                        wheelFadeEnabled = true
+                        wheelFadeEnabled = false
                         glassBorderEnabled = true
                         glassStrokeWidth = 1.0
                         glassStrokeOpacity = 0.1
                         glassGradientOpacity = 0.2
                         glassUnidirectionalGradient = false
                         glassOverlayOpacity = 0.1
-                        parallaxEnabled = false
-                        parallaxAmount = 20.0
-                        centerParallaxEnabled = false
-                        centerParallaxAmount = 30.0
-                        parallaxRotationEnabled = false
-                        parallaxRotationAmount = 5.0
+                        parallaxEnabled = true
+                        parallaxAmount = 10.0
+                        centerParallaxEnabled = true
+                        centerParallaxAmount = 20.0
+                        parallaxRotationEnabled = true
+                        parallaxRotationAmount = 8.0
                     }
                 }
             }
@@ -628,12 +630,25 @@ struct iPodScrollWheel: View {
     let strokeGradientOpacity: Double
     let unidirectionalGradient: Bool
     let fadeEnabled: Bool
+    let tiltX: Double
+    let tiltY: Double
     let onScroll: (ScrollDirection) -> Void
     @State private var lastAngle: CGFloat = 0
     @State private var counter: CGFloat = 0
     @State private var isScrolling = false
     @State private var fillOpacity: Double = 0.0
     @State private var touchAngle: Double = 0
+
+    // Computed angle - uses touch angle when scrolling, tilt angle when idle
+    private var gradientAngle: Double {
+        if isScrolling {
+            return touchAngle
+        } else {
+            // Match the card gradient calculation exactly
+            let angle = atan2(tiltY, tiltX) * 180 / .pi
+            return angle + 90
+        }
+    }
 
     // Independent wheel stroke settings
     private let wheelStrokeWidth: CGFloat = 1.0
@@ -653,7 +668,7 @@ struct iPodScrollWheel: View {
                     .frame(width: size, height: size)
                     .animation(fadeEnabled ? .easeInOut(duration: 0.6) : .none, value: fillOpacity)
 
-                // Stroke gradient - follows finger when scrolling
+                // Stroke gradient - follows finger when scrolling, follows tilt when idle
                 if strokeGradientEnabled {
                     Circle()
                         .strokeBorder(
@@ -666,16 +681,15 @@ struct iPodScrollWheel: View {
                                     .init(color: Color.white.opacity(strokeGradientOpacity), location: 0.5),
                                     .init(color: Color.white.opacity(0), location: 1.0)
                                 ]),
-                                startPoint: .init(x: 0.5 + 0.5 * cos(touchAngle * .pi / 180),
-                                                y: 0.5 + 0.5 * sin(touchAngle * .pi / 180)),
-                                endPoint: .init(x: 0.5 - 0.5 * cos(touchAngle * .pi / 180),
-                                              y: 0.5 - 0.5 * sin(touchAngle * .pi / 180))
+                                startPoint: .init(x: 0.5 + 0.5 * cos(gradientAngle * .pi / 180),
+                                                y: 0.5 + 0.5 * sin(gradientAngle * .pi / 180)),
+                                endPoint: .init(x: 0.5 - 0.5 * cos(gradientAngle * .pi / 180),
+                                              y: 0.5 - 0.5 * sin(gradientAngle * .pi / 180))
                             ),
                             lineWidth: wheelStrokeWidth
                         )
                         .frame(width: size, height: size)
-                        .opacity(fadeEnabled ? (isScrolling ? 1.0 : 0.0) : 1.0)
-                        .animation(fadeEnabled ? .easeOut(duration: 0.3) : .none, value: isScrolling)
+                        .animation(.easeOut(duration: 0.6), value: gradientAngle)
                         .allowsHitTesting(false)
                 }
 
@@ -693,7 +707,7 @@ struct iPodScrollWheel: View {
                             LinearGradient(
                                 gradient: Gradient(stops: [
                                     .init(color: Color.white.opacity(0), location: 0.0),
-                                    .init(color: Color.white.opacity(fillGradientOpacity * (fadeEnabled ? (fillOpacity / 0.1) : 1.0)), location: 1.0)
+                                    .init(color: Color.white.opacity(fillGradientOpacity), location: 1.0)
                                 ]),
                                 startPoint: .init(x: 0.5 + 0.5 * cos(touchAngle * .pi / 180),
                                                 y: 0.5 + 0.5 * sin(touchAngle * .pi / 180)),
@@ -702,8 +716,8 @@ struct iPodScrollWheel: View {
                             )
                         )
                         .frame(width: size, height: size)
-                        .opacity(fadeEnabled ? (isScrolling ? 1.0 : 0.0) : 1.0)
-                        .animation(fadeEnabled ? .easeOut(duration: 0.3) : .none, value: isScrolling)
+                        .opacity(isScrolling ? 1.0 : 0.0)
+                        .animation(.easeOut(duration: 0.3), value: isScrolling)
                         .allowsHitTesting(false)
                 }
 
