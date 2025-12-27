@@ -1,5 +1,4 @@
 import SwiftUI
-import SwiftGlass
 import CoreMotion
 import Combine
 
@@ -70,11 +69,10 @@ struct ContentView: View {
     @State private var debugWheelBottomPadding: CGFloat = 40
     @State private var debugWheelGradientEnabled: Bool = true
     @State private var debugGlassBorderEnabled: Bool = true
-    @State private var debugGlassOpacity: Double = 0.5
-    @State private var debugGlassStrokeWidth: CGFloat = 1.5
-    @State private var debugGlassRadius: CGFloat = 20
-    @State private var debugGlassShadowRadius: CGFloat = 10
-    @State private var debugGlassShadowOpacity: Double = 0.3
+    @State private var debugGlassStrokeWidth: CGFloat = 1.0
+    @State private var debugGlassStrokeOpacity: Double = 0.1
+    @State private var debugGlassGradientOpacity: Double = 0.2
+    private let glassRadius: CGFloat = 0
 
     @StateObject private var motionManager = MotionManager()
     
@@ -122,11 +120,10 @@ struct ContentView: View {
                                 size: cardWidth,
                                 glassBorderEnabled: debugGlassBorderEnabled,
                                 showGlassBorder: isCenterCard,
-                                glassOpacity: debugGlassOpacity,
                                 glassStrokeWidth: debugGlassStrokeWidth,
-                                glassRadius: debugGlassRadius,
-                                glassShadowRadius: debugGlassShadowRadius,
-                                glassShadowOpacity: debugGlassShadowOpacity,
+                                glassStrokeOpacity: debugGlassStrokeOpacity,
+                                glassGradientOpacity: debugGlassGradientOpacity,
+                                glassRadius: glassRadius,
                                 tiltX: motionManager.tiltX,
                                 tiltY: motionManager.tiltY,
                                 distance: distance
@@ -194,11 +191,9 @@ struct ContentView: View {
                     wheelBottomPadding: $debugWheelBottomPadding,
                     wheelGradientEnabled: $debugWheelGradientEnabled,
                     glassBorderEnabled: $debugGlassBorderEnabled,
-                    glassOpacity: $debugGlassOpacity,
                     glassStrokeWidth: $debugGlassStrokeWidth,
-                    glassRadius: $debugGlassRadius,
-                    glassShadowRadius: $debugGlassShadowRadius,
-                    glassShadowOpacity: $debugGlassShadowOpacity
+                    glassStrokeOpacity: $debugGlassStrokeOpacity,
+                    glassGradientOpacity: $debugGlassGradientOpacity
                 )
             }
         }
@@ -366,11 +361,9 @@ struct DebugMenu: View {
     @Binding var wheelBottomPadding: CGFloat
     @Binding var wheelGradientEnabled: Bool
     @Binding var glassBorderEnabled: Bool
-    @Binding var glassOpacity: Double
     @Binding var glassStrokeWidth: CGFloat
-    @Binding var glassRadius: CGFloat
-    @Binding var glassShadowRadius: CGFloat
-    @Binding var glassShadowOpacity: Double
+    @Binding var glassStrokeOpacity: Double
+    @Binding var glassGradientOpacity: Double
     @Environment(\.dismiss) var dismiss
 
     var body: some View {
@@ -395,33 +388,21 @@ struct DebugMenu: View {
 
                     if glassBorderEnabled {
                         VStack(alignment: .leading) {
-                            Text("Glass Opacity: \(glassOpacity, specifier: "%.2f")")
-                                .font(.caption)
-                            Slider(value: $glassOpacity, in: 0.0...1.0, step: 0.05)
-                        }
-
-                        VStack(alignment: .leading) {
                             Text("Glass Stroke Width: \(glassStrokeWidth, specifier: "%.1f")pt")
                                 .font(.caption)
-                            Slider(value: $glassStrokeWidth, in: 0.5...5.0, step: 0.5)
+                            Slider(value: $glassStrokeWidth, in: 0.5...3.0, step: 0.5)
                         }
 
                         VStack(alignment: .leading) {
-                            Text("Glass Radius: \(glassRadius, specifier: "%.0f")pt")
+                            Text("Glass Stroke Opacity: \(glassStrokeOpacity, specifier: "%.2f")")
                                 .font(.caption)
-                            Slider(value: $glassRadius, in: 0...30, step: 1)
+                            Slider(value: $glassStrokeOpacity, in: 0.0...0.5, step: 0.05)
                         }
 
                         VStack(alignment: .leading) {
-                            Text("Gradient Shadow Radius: \(glassShadowRadius, specifier: "%.0f")pt")
+                            Text("Glass Gradient Opacity: \(glassGradientOpacity, specifier: "%.2f")")
                                 .font(.caption)
-                            Slider(value: $glassShadowRadius, in: 0...50, step: 1)
-                        }
-
-                        VStack(alignment: .leading) {
-                            Text("Gradient Shadow Opacity: \(glassShadowOpacity, specifier: "%.2f")")
-                                .font(.caption)
-                            Slider(value: $glassShadowOpacity, in: 0.0...1.0, step: 0.05)
+                            Slider(value: $glassGradientOpacity, in: 0.0...1.0, step: 0.05)
                         }
                     }
                 }
@@ -464,11 +445,9 @@ struct DebugMenu: View {
                         wheelBottomPadding = 40
                         wheelGradientEnabled = true
                         glassBorderEnabled = true
-                        glassOpacity = 0.5
-                        glassStrokeWidth = 1.5
-                        glassRadius = 20
-                        glassShadowRadius = 10
-                        glassShadowOpacity = 0.3
+                        glassStrokeWidth = 1.0
+                        glassStrokeOpacity = 0.1
+                        glassGradientOpacity = 0.2
                     }
                 }
             }
@@ -601,11 +580,10 @@ private struct PosterCard: View {
     let size: CGFloat
     let glassBorderEnabled: Bool
     let showGlassBorder: Bool
-    let glassOpacity: Double
     let glassStrokeWidth: CGFloat
+    let glassStrokeOpacity: Double
+    let glassGradientOpacity: Double
     let glassRadius: CGFloat
-    let glassShadowRadius: CGFloat
-    let glassShadowOpacity: Double
     let tiltX: Double
     let tiltY: Double
     let distance: CGFloat
@@ -615,35 +593,70 @@ private struct PosterCard: View {
             .resizable()
             .scaledToFill()
             .frame(width: size, height: size)
-            .clipShape(RoundedRectangle(cornerRadius: glassBorderEnabled ? glassRadius : 0))
             .overlay(
                 Group {
                     if glassBorderEnabled && showGlassBorder {
-                        RoundedRectangle(cornerRadius: glassRadius)
-                            .fill(.clear)
-                            .glass(
-                                radius: glassRadius,
-                                shape: .roundedRectangle(radius: glassRadius),
-                                color: .white,
-                                colorOpacity: 0.05,
-                                material: .ultraThinMaterial,
-                                gradientOpacity: glassOpacity,
-                                strokeWidth: glassStrokeWidth,
-                                shadowColor: .white,
-                                shadowOpacity: glassShadowOpacity,
-                                shadowRadius: glassShadowRadius,
-                                shadowX: 0,
-                                shadowY: 0
-                            )
-                            .rotationEffect(.degrees(atan2(tiltY, tiltX) * 180 / .pi))
-                            .animation(.easeOut(duration: 0.2), value: tiltX)
-                            .animation(.easeOut(duration: 0.2), value: tiltY)
-                            .opacity(1.0 - min(abs(distance), 1.0))
-                            .animation(.easeInOut(duration: 0.3), value: distance)
+                        GlassBorderEffect(
+                            cornerRadius: glassRadius,
+                            strokeWidth: glassStrokeWidth,
+                            strokeOpacity: glassStrokeOpacity,
+                            gradientOpacity: glassGradientOpacity,
+                            tiltX: tiltX,
+                            tiltY: tiltY,
+                            distance: distance
+                        )
                     }
                 }
             )
             .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
+    }
+}
+
+struct GlassBorderEffect: View {
+    let cornerRadius: CGFloat
+    let strokeWidth: CGFloat
+    let strokeOpacity: Double
+    let gradientOpacity: Double
+    let tiltX: Double
+    let tiltY: Double
+    let distance: CGFloat
+
+    var gradientAngle: Double {
+        // Конвертируем наклон в угол для градиента (в градусах)
+        let angle = atan2(tiltY, tiltX) * 180 / .pi
+        return angle + 90 // Смещаем на 90° чтобы градиент был перпендикулярен наклону
+    }
+
+    var effectOpacity: Double {
+        // Плавно затухает когда карточка отходит от центра
+        return 1.0 - min(abs(distance), 1.0)
+    }
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: cornerRadius)
+            .strokeBorder(
+                LinearGradient(
+                    gradient: Gradient(stops: [
+                        .init(color: .white.opacity(0), location: 0.0),
+                        .init(color: .white.opacity(gradientOpacity * effectOpacity), location: 0.5),
+                        .init(color: .white.opacity(0), location: 1.0)
+                    ]),
+                    startPoint: .init(
+                        x: 0.5 + 0.5 * cos(gradientAngle * .pi / 180),
+                        y: 0.5 + 0.5 * sin(gradientAngle * .pi / 180)
+                    ),
+                    endPoint: .init(
+                        x: 0.5 - 0.5 * cos(gradientAngle * .pi / 180),
+                        y: 0.5 - 0.5 * sin(gradientAngle * .pi / 180)
+                    )
+                ),
+                lineWidth: strokeWidth
+            )
+            .background(
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .strokeBorder(Color.white.opacity(strokeOpacity * effectOpacity), lineWidth: strokeWidth)
+            )
+            .animation(.easeInOut(duration: 0.3), value: distance)
     }
 }
 
