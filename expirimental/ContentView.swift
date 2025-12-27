@@ -78,6 +78,12 @@ struct ContentView: View {
     @State private var debugGlassGradientOpacity: Double = 0.2
     @State private var debugGlassUnidirectionalGradient: Bool = false
     @State private var debugGlassOverlayOpacity: Double = 0.1
+    @State private var debugParallaxEnabled: Bool = false
+    @State private var debugParallaxAmount: Double = 20.0
+    @State private var debugCenterParallaxEnabled: Bool = false
+    @State private var debugCenterParallaxAmount: Double = 30.0
+    @State private var debugParallaxRotationEnabled: Bool = false
+    @State private var debugParallaxRotationAmount: Double = 5.0
     private let glassRadius: CGFloat = 0
 
     @StateObject private var motionManager = MotionManager()
@@ -137,12 +143,20 @@ struct ContentView: View {
                             )
                             .scaleEffect(scale(for: distance))
                             .rotation3DEffect(
-                                .degrees(rotation(for: distance)),
+                                .degrees(rotation(for: distance) + (debugParallaxRotationEnabled ? motionManager.tiltX * debugParallaxRotationAmount : 0)),
                                 axis: (x: 0, y: 1, z: 0),
                                 anchor: .center,
                                 perspective: 0.7
                             )
                             .offset(x: xOffset(for: distance, cardWidth: cardWidth))
+                            .offset(
+                                x: debugParallaxEnabled ? motionManager.tiltX * debugParallaxAmount : 0,
+                                y: debugParallaxEnabled ? motionManager.tiltY * debugParallaxAmount : 0
+                            )
+                            .offset(
+                                x: (debugCenterParallaxEnabled && isCenterCard) ? motionManager.tiltX * debugCenterParallaxAmount : 0,
+                                y: (debugCenterParallaxEnabled && isCenterCard) ? motionManager.tiltY * debugCenterParallaxAmount : 0
+                            )
                             .zIndex(zIndex(for: distance))
                             .opacity(opacity(for: distance))
                         }
@@ -210,7 +224,13 @@ struct ContentView: View {
                     glassStrokeOpacity: $debugGlassStrokeOpacity,
                     glassGradientOpacity: $debugGlassGradientOpacity,
                     glassUnidirectionalGradient: $debugGlassUnidirectionalGradient,
-                    glassOverlayOpacity: $debugGlassOverlayOpacity
+                    glassOverlayOpacity: $debugGlassOverlayOpacity,
+                    parallaxEnabled: $debugParallaxEnabled,
+                    parallaxAmount: $debugParallaxAmount,
+                    centerParallaxEnabled: $debugCenterParallaxEnabled,
+                    centerParallaxAmount: $debugCenterParallaxAmount,
+                    parallaxRotationEnabled: $debugParallaxRotationEnabled,
+                    parallaxRotationAmount: $debugParallaxRotationAmount
                 )
             }
         }
@@ -387,6 +407,12 @@ struct DebugMenu: View {
     @Binding var glassGradientOpacity: Double
     @Binding var glassUnidirectionalGradient: Bool
     @Binding var glassOverlayOpacity: Double
+    @Binding var parallaxEnabled: Bool
+    @Binding var parallaxAmount: Double
+    @Binding var centerParallaxEnabled: Bool
+    @Binding var centerParallaxAmount: Double
+    @Binding var parallaxRotationEnabled: Bool
+    @Binding var parallaxRotationAmount: Double
     @Environment(\.dismiss) var dismiss
 
     var body: some View {
@@ -476,6 +502,36 @@ struct DebugMenu: View {
                             .font(.caption)
                         Slider(value: $maxAngle, in: 30...120, step: 1)
                     }
+
+                    Toggle("Parallax (All Cards)", isOn: $parallaxEnabled)
+
+                    if parallaxEnabled {
+                        VStack(alignment: .leading) {
+                            Text("Amount: \(parallaxAmount, specifier: "%.0f")")
+                                .font(.caption)
+                            Slider(value: $parallaxAmount, in: 0...50, step: 5)
+                        }
+                    }
+
+                    Toggle("Parallax (Center Card)", isOn: $centerParallaxEnabled)
+
+                    if centerParallaxEnabled {
+                        VStack(alignment: .leading) {
+                            Text("Amount: \(centerParallaxAmount, specifier: "%.0f")")
+                                .font(.caption)
+                            Slider(value: $centerParallaxAmount, in: 0...100, step: 5)
+                        }
+                    }
+
+                    Toggle("Parallax Rotation", isOn: $parallaxRotationEnabled)
+
+                    if parallaxRotationEnabled {
+                        VStack(alignment: .leading) {
+                            Text("Rotation Amount: \(parallaxRotationAmount, specifier: "%.0f")°")
+                                .font(.caption)
+                            Slider(value: $parallaxRotationAmount, in: 0...20, step: 1)
+                        }
+                    }
                 }
 
                 Section("Animation") {
@@ -511,6 +567,12 @@ struct DebugMenu: View {
                         glassGradientOpacity = 0.2
                         glassUnidirectionalGradient = false
                         glassOverlayOpacity = 0.1
+                        parallaxEnabled = false
+                        parallaxAmount = 20.0
+                        centerParallaxEnabled = false
+                        centerParallaxAmount = 30.0
+                        parallaxRotationEnabled = false
+                        parallaxRotationAmount = 5.0
                     }
                 }
             }
@@ -579,7 +641,7 @@ struct iPodScrollWheel: View {
                         .strokeBorder(
                             LinearGradient(
                                 gradient: Gradient(stops: unidirectionalGradient ? [
-                                    .init(color: Color.white.opacity(0), location: 0.0),
+                                    .init(color: Color.white.opacity(0), location: 0.5),
                                     .init(color: Color.white.opacity(strokeGradientOpacity), location: 1.0)
                                 ] : [
                                     .init(color: Color.white.opacity(0), location: 0.0),
@@ -732,7 +794,7 @@ private struct PosterCard: View {
                             .fill(
                                 LinearGradient(
                                     gradient: Gradient(stops: [
-                                        .init(color: .white.opacity(0), location: 0.0),
+                                        .init(color: .white.opacity(0), location: 0.5),
                                         .init(color: .white.opacity(glassOverlayOpacity * gradientEffectOpacity), location: 1.0)
                                     ]),
                                     startPoint: .init(
@@ -787,7 +849,7 @@ struct GlassBorderEffect: View {
                 .strokeBorder(
                     LinearGradient(
                         gradient: Gradient(stops: unidirectionalGradient ? [
-                            .init(color: .white.opacity(0), location: 0.0),
+                            .init(color: .white.opacity(0), location: 0.5),
                             .init(color: .white.opacity(gradientOpacity * gradientEffectOpacity), location: 1.0)
                         ] : [
                             .init(color: .white.opacity(0), location: 0.0),
