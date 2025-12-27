@@ -64,7 +64,7 @@ struct ContentView: View {
     @State private var debugSpacing: CGFloat = 0.55
     @State private var debugMaxAngle: Double = 80
     @State private var debugVelocityMultiplier: CGFloat = 0.3
-    @State private var debugAnimDuration: Double = 1.00
+    @State private var debugAnimDuration: Double = 1.5
     @State private var debugCarouselOffset: CGFloat = -60
     @State private var debugWheelBottomPadding: CGFloat = 100
     @State private var debugWheelFillGradientEnabled: Bool = false
@@ -469,7 +469,7 @@ struct DebugMenu: View {
                         spacing = 0.55
                         maxAngle = 80
                         velocityMultiplier = 0.3
-                        animDuration = 1.00
+                        animDuration = 1.5
                         carouselOffset = -60
                         wheelBottomPadding = 100
                         wheelFillGradientEnabled = false
