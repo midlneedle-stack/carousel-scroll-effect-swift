@@ -1,4 +1,38 @@
 import SwiftUI
+import SwiftGlass
+import CoreMotion
+import Combine
+
+// MARK: - Motion Manager
+
+class MotionManager: ObservableObject {
+    @Published var tiltX: Double = 0.0
+    @Published var tiltY: Double = 0.0
+    private let motionManager = CMMotionManager()
+
+    init() {
+        startDeviceMotion()
+    }
+
+    private func startDeviceMotion() {
+        guard motionManager.isDeviceMotionAvailable else { return }
+
+        motionManager.deviceMotionUpdateInterval = 1.0 / 60.0
+        motionManager.startDeviceMotionUpdates(to: .main) { [weak self] motion, error in
+            guard let motion = motion, error == nil else { return }
+
+            let gravity = motion.gravity
+            DispatchQueue.main.async {
+                self?.tiltX = gravity.x
+                self?.tiltY = gravity.y
+            }
+        }
+    }
+
+    deinit {
+        motionManager.stopDeviceMotionUpdates()
+    }
+}
 
 struct ContentView: View {
     private let posters = [
@@ -9,7 +43,10 @@ struct ContentView: View {
         "Instagram post - 663",
         "Instagram post - 664",
         "Instagram post - 665",
-        "Instagram post - 666"
+        "Instagram post - 666",
+        "Instagram post - 668",
+        "Instagram post - 671",
+        "Instagram post - 672"
     ]
     
     private let stackCount = 12
@@ -27,8 +64,19 @@ struct ContentView: View {
     @State private var showDebug = false
     @State private var debugSpacing: CGFloat = 0.55
     @State private var debugMaxAngle: Double = 80
-    @State private var debugVelocityMultiplier: CGFloat = 1.2
-    @State private var debugAnimDuration: Double = 0.5
+    @State private var debugVelocityMultiplier: CGFloat = 0.3
+    @State private var debugAnimDuration: Double = 1.00
+    @State private var debugCarouselOffset: CGFloat = 60
+    @State private var debugWheelBottomPadding: CGFloat = 40
+    @State private var debugWheelGradientEnabled: Bool = true
+    @State private var debugGlassBorderEnabled: Bool = true
+    @State private var debugGlassOpacity: Double = 0.5
+    @State private var debugGlassStrokeWidth: CGFloat = 1.5
+    @State private var debugGlassRadius: CGFloat = 20
+    @State private var debugGlassShadowRadius: CGFloat = 10
+    @State private var debugGlassShadowOpacity: Double = 0.3
+
+    @StateObject private var motionManager = MotionManager()
     
     init() {
         let initialID = initialStackIndex * posters.count
@@ -45,88 +93,112 @@ struct ContentView: View {
             let cardWidth   = totalWidth * visibleCardWidthRatio
             let cardHeight  = cardWidth
             
-            GeometryReader { geoProxy in
-                ZStack {
-                    Color.black.ignoresSafeArea()
+            ZStack {
+                Color.black.ignoresSafeArea()
 
-                    VStack(spacing: 0) {
-                        // Debug button at top (invisible)
-                        Button(action: {
-                            withAnimation {
-                                showDebug.toggle()
-                            }
-                        }) {
-                            Rectangle()
-                                .fill(Color.black.opacity(0.001))
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 60)
+                VStack(spacing: 0) {
+                    // Debug button at top (invisible)
+                    Button(action: {
+                        withAnimation {
+                            showDebug.toggle()
                         }
-
-                        Spacer()
-
-                        // Carousel - centered
-                        ZStack {
-                            ForEach(items.indices, id: \.self) { index in
-                                let distance = clampedDistance(for: index, cardWidth: cardWidth)
-
-                                PosterCard(imageName: items[index], size: cardWidth)
-                                    .scaleEffect(scale(for: distance))
-                                    .rotation3DEffect(
-                                        .degrees(rotation(for: distance)),
-                                        axis: (x: 0, y: 1, z: 0),
-                                        anchor: .center,
-                                        perspective: 0.7
-                                    )
-                                    .offset(x: xOffset(for: distance, cardWidth: cardWidth))
-                                    .zIndex(zIndex(for: distance))
-                                    .opacity(opacity(for: distance))
-                            }
-                        }
-                        .frame(height: cardHeight * 1.2)
-                        .simultaneousGesture(
-                            DragGesture(minimumDistance: 0)
-                                .onChanged { value in
-                                    if dragStartTime == nil {
-                                        dragStartTime = value.time
-                                        // НЕ сбрасываем accumulatedVelocity если анимация идет
-                                        if !isAnimating {
-                                            accumulatedVelocity = 0
-                                        }
-                                    }
-                                    if !isDragging { isDragging = true }
-
-                                    // Плавное начало драга
-                                    withAnimation(.interactiveSpring(response: 0.25, dampingFraction: 1.0)) {
-                                        dragOffset = value.translation.width
-                                    }
-                                }
-                                .onEnded { value in
-                                    let cardWidth = proxy.size.width * visibleCardWidthRatio
-                                    handleDragEnd(value, cardWidth: cardWidth)
-                                    dragStartTime = nil
-                                    isDragging = false
-                                }
-                        )
-
-                        Spacer()
-
-                        // iPod-style scroll wheel at bottom
-                        iPodScrollWheel(onScroll: { direction in
-                            scrollCard(direction: direction)
-                        })
-                        .frame(width: 180, height: 180)
-                        .padding(.bottom, geoProxy.safeAreaInsets.bottom + 20)
+                    }) {
+                        Rectangle()
+                            .fill(Color.black.opacity(0.001))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 60)
                     }
+
+                    Spacer()
+
+                    // Carousel
+                    ZStack {
+                        ForEach(items.indices, id: \.self) { index in
+                            let distance = clampedDistance(for: index, cardWidth: cardWidth)
+                            let isCenterCard = abs(distance) < 0.5
+
+                            PosterCard(
+                                imageName: items[index],
+                                size: cardWidth,
+                                glassBorderEnabled: debugGlassBorderEnabled,
+                                showGlassBorder: isCenterCard,
+                                glassOpacity: debugGlassOpacity,
+                                glassStrokeWidth: debugGlassStrokeWidth,
+                                glassRadius: debugGlassRadius,
+                                glassShadowRadius: debugGlassShadowRadius,
+                                glassShadowOpacity: debugGlassShadowOpacity,
+                                tiltX: motionManager.tiltX,
+                                tiltY: motionManager.tiltY,
+                                distance: distance
+                            )
+                            .scaleEffect(scale(for: distance))
+                            .rotation3DEffect(
+                                .degrees(rotation(for: distance)),
+                                axis: (x: 0, y: 1, z: 0),
+                                anchor: .center,
+                                perspective: 0.7
+                            )
+                            .offset(x: xOffset(for: distance, cardWidth: cardWidth))
+                            .zIndex(zIndex(for: distance))
+                            .opacity(opacity(for: distance))
+                        }
+                    }
+                    .frame(height: cardHeight * 1.2)
+                    .offset(y: debugCarouselOffset)
+                    .simultaneousGesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { value in
+                                if dragStartTime == nil {
+                                    dragStartTime = value.time
+                                    // НЕ сбрасываем accumulatedVelocity если анимация идет
+                                    if !isAnimating {
+                                        accumulatedVelocity = 0
+                                    }
+                                }
+                                if !isDragging { isDragging = true }
+
+                                // Плавное начало драга
+                                withAnimation(.interactiveSpring(response: 0.25, dampingFraction: 1.0)) {
+                                    dragOffset = value.translation.width
+                                }
+                            }
+                            .onEnded { value in
+                                let cardWidth = proxy.size.width * visibleCardWidthRatio
+                                handleDragEnd(value, cardWidth: cardWidth)
+                                dragStartTime = nil
+                                isDragging = false
+                            }
+                    )
+
+                    Spacer()
+
+                    // iPod-style scroll wheel at bottom
+                    iPodScrollWheel(
+                        gradientEnabled: debugWheelGradientEnabled,
+                        onScroll: { direction in
+                            scrollCard(direction: direction)
+                        }
+                    )
+                    .frame(width: 180, height: 180)
+                    .padding(.bottom, debugWheelBottomPadding)
                 }
             }
-            .ignoresSafeArea()
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .sheet(isPresented: $showDebug) {
                 DebugMenu(
                     spacing: $debugSpacing,
                     maxAngle: $debugMaxAngle,
                     velocityMultiplier: $debugVelocityMultiplier,
-                    animDuration: $debugAnimDuration
+                    animDuration: $debugAnimDuration,
+                    carouselOffset: $debugCarouselOffset,
+                    wheelBottomPadding: $debugWheelBottomPadding,
+                    wheelGradientEnabled: $debugWheelGradientEnabled,
+                    glassBorderEnabled: $debugGlassBorderEnabled,
+                    glassOpacity: $debugGlassOpacity,
+                    glassStrokeWidth: $debugGlassStrokeWidth,
+                    glassRadius: $debugGlassRadius,
+                    glassShadowRadius: $debugGlassShadowRadius,
+                    glassShadowOpacity: $debugGlassShadowOpacity
                 )
             }
         }
@@ -197,8 +269,10 @@ struct ContentView: View {
         // Устанавливаем флаг анимации
         isAnimating = true
 
-        // Сбрасываем dragOffset БЕЗ анимации
-        dragOffset = 0
+        // Сбрасываем dragOffset с плавной spring-анимацией
+        withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+            dragOffset = 0
+        }
 
         withAnimation(.timingCurve(0.12, 0.9, 0.2, 1.0, duration: durationAnim)) {
             currentIndex = newIndex
@@ -288,45 +362,113 @@ struct DebugMenu: View {
     @Binding var maxAngle: Double
     @Binding var velocityMultiplier: CGFloat
     @Binding var animDuration: Double
+    @Binding var carouselOffset: CGFloat
+    @Binding var wheelBottomPadding: CGFloat
+    @Binding var wheelGradientEnabled: Bool
+    @Binding var glassBorderEnabled: Bool
+    @Binding var glassOpacity: Double
+    @Binding var glassStrokeWidth: CGFloat
+    @Binding var glassRadius: CGFloat
+    @Binding var glassShadowRadius: CGFloat
+    @Binding var glassShadowOpacity: Double
     @Environment(\.dismiss) var dismiss
-    
+
     var body: some View {
         NavigationView {
             Form {
+                Section("Layout") {
+                    VStack(alignment: .leading) {
+                        Text("Carousel Offset: \(carouselOffset, specifier: "%.0f")pt")
+                            .font(.caption)
+                        Slider(value: $carouselOffset, in: -200...200, step: 5)
+                    }
+
+                    VStack(alignment: .leading) {
+                        Text("Wheel Bottom Padding: \(wheelBottomPadding, specifier: "%.0f")pt")
+                            .font(.caption)
+                        Slider(value: $wheelBottomPadding, in: 0...300, step: 5)
+                    }
+
+                    Toggle("Wheel Gradient", isOn: $wheelGradientEnabled)
+
+                    Toggle("Glass Border", isOn: $glassBorderEnabled)
+
+                    if glassBorderEnabled {
+                        VStack(alignment: .leading) {
+                            Text("Glass Opacity: \(glassOpacity, specifier: "%.2f")")
+                                .font(.caption)
+                            Slider(value: $glassOpacity, in: 0.0...1.0, step: 0.05)
+                        }
+
+                        VStack(alignment: .leading) {
+                            Text("Glass Stroke Width: \(glassStrokeWidth, specifier: "%.1f")pt")
+                                .font(.caption)
+                            Slider(value: $glassStrokeWidth, in: 0.5...5.0, step: 0.5)
+                        }
+
+                        VStack(alignment: .leading) {
+                            Text("Glass Radius: \(glassRadius, specifier: "%.0f")pt")
+                                .font(.caption)
+                            Slider(value: $glassRadius, in: 0...30, step: 1)
+                        }
+
+                        VStack(alignment: .leading) {
+                            Text("Gradient Shadow Radius: \(glassShadowRadius, specifier: "%.0f")pt")
+                                .font(.caption)
+                            Slider(value: $glassShadowRadius, in: 0...50, step: 1)
+                        }
+
+                        VStack(alignment: .leading) {
+                            Text("Gradient Shadow Opacity: \(glassShadowOpacity, specifier: "%.2f")")
+                                .font(.caption)
+                            Slider(value: $glassShadowOpacity, in: 0.0...1.0, step: 0.05)
+                        }
+                    }
+                }
+
                 Section("Carousel Settings") {
                     VStack(alignment: .leading) {
                         Text("Spacing: \(spacing, specifier: "%.2f")")
                             .font(.caption)
                         Slider(value: $spacing, in: 0.3...0.8, step: 0.01)
                     }
-                    
+
                     VStack(alignment: .leading) {
                         Text("Max Angle: \(maxAngle, specifier: "%.0f")°")
                             .font(.caption)
                         Slider(value: $maxAngle, in: 30...120, step: 1)
                     }
                 }
-                
+
                 Section("Animation") {
                     VStack(alignment: .leading) {
                         Text("Velocity Multiplier: \(velocityMultiplier, specifier: "%.1f")")
                             .font(.caption)
                         Slider(value: $velocityMultiplier, in: 0.3...3.0, step: 0.1)
                     }
-                    
+
                     VStack(alignment: .leading) {
                         Text("Base Duration: \(animDuration, specifier: "%.2f")s")
                             .font(.caption)
                         Slider(value: $animDuration, in: 0.2...1.5, step: 0.05)
                     }
                 }
-                
+
                 Section {
                     Button("Reset to Defaults") {
                         spacing = 0.55
                         maxAngle = 80
-                        velocityMultiplier = 1.2
-                        animDuration = 0.5
+                        velocityMultiplier = 0.3
+                        animDuration = 1.00
+                        carouselOffset = 60
+                        wheelBottomPadding = 40
+                        wheelGradientEnabled = true
+                        glassBorderEnabled = true
+                        glassOpacity = 0.5
+                        glassStrokeWidth = 1.5
+                        glassRadius = 20
+                        glassShadowRadius = 10
+                        glassShadowOpacity = 0.3
                     }
                 }
             }
@@ -359,22 +501,46 @@ private extension Comparable {
 // MARK: - iPod Scroll Wheel
 
 struct iPodScrollWheel: View {
+    let gradientEnabled: Bool
     let onScroll: (ScrollDirection) -> Void
     @State private var lastAngle: CGFloat = 0
     @State private var counter: CGFloat = 0
     @State private var isScrolling = false
     @State private var strokeOpacity: Double = 0.0
+    @State private var touchAngle: Double = 0
 
     var body: some View {
         GeometryReader { geometry in
             let size = min(geometry.size.width, geometry.size.height)
 
             ZStack {
-                // Visible stroke when scrolling
+                // Base fill when scrolling
                 Circle()
-                    .stroke(Color.white.opacity(strokeOpacity), lineWidth: 60)
+                    .fill(Color.white.opacity(strokeOpacity))
                     .frame(width: size, height: size)
                     .animation(.easeInOut(duration: 0.6), value: strokeOpacity)
+                    .allowsHitTesting(false)
+
+                // Gradient following finger
+                if gradientEnabled {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                gradient: Gradient(stops: [
+                                    .init(color: Color.white.opacity(0), location: 0.0),
+                                    .init(color: Color.white.opacity(0.1 * strokeOpacity / 0.1), location: 1.0)
+                                ]),
+                                startPoint: .init(x: 0.5 + 0.5 * cos(touchAngle * .pi / 180),
+                                                y: 0.5 + 0.5 * sin(touchAngle * .pi / 180)),
+                                endPoint: .init(x: 0.5 - 0.5 * cos(touchAngle * .pi / 180),
+                                              y: 0.5 - 0.5 * sin(touchAngle * .pi / 180))
+                            )
+                        )
+                        .frame(width: size, height: size)
+                        .opacity(isScrolling ? 1.0 : 0.0)
+                        .animation(.easeOut(duration: 0.3), value: isScrolling)
+                        .allowsHitTesting(false)
+                }
 
                 // Invisible scroll area
                 Circle()
@@ -393,13 +559,16 @@ struct iPodScrollWheel: View {
                 if !isScrolling {
                     isScrolling = true
                     withAnimation(.easeIn(duration: 0.4)) {
-                        strokeOpacity = 0.05
+                        strokeOpacity = 0.1
                     }
                 }
 
                 let center = size * 0.5
                 var angle = atan2(value.location.x - center, center - value.location.y) * 180 / .pi
                 if angle < 0 { angle += 360 }
+
+                // Update touch angle for gradient
+                touchAngle = Double(angle)
 
                 let theta = lastAngle - angle
                 lastAngle = angle
@@ -430,14 +599,64 @@ struct iPodScrollWheel: View {
 private struct PosterCard: View {
     let imageName: String
     let size: CGFloat
-    
+    let glassBorderEnabled: Bool
+    let showGlassBorder: Bool
+    let glassOpacity: Double
+    let glassStrokeWidth: CGFloat
+    let glassRadius: CGFloat
+    let glassShadowRadius: CGFloat
+    let glassShadowOpacity: Double
+    let tiltX: Double
+    let tiltY: Double
+    let distance: CGFloat
+
     var body: some View {
         Image(imageName)
             .resizable()
             .scaledToFill()
             .frame(width: size, height: size)
-            .clipped()
+            .clipShape(RoundedRectangle(cornerRadius: glassBorderEnabled ? glassRadius : 0))
+            .overlay(
+                Group {
+                    if glassBorderEnabled && showGlassBorder {
+                        RoundedRectangle(cornerRadius: glassRadius)
+                            .fill(.clear)
+                            .glass(
+                                radius: glassRadius,
+                                shape: .roundedRectangle(radius: glassRadius),
+                                color: .white,
+                                colorOpacity: 0.05,
+                                material: .ultraThinMaterial,
+                                gradientOpacity: glassOpacity,
+                                strokeWidth: glassStrokeWidth,
+                                shadowColor: .white,
+                                shadowOpacity: glassShadowOpacity,
+                                shadowRadius: glassShadowRadius,
+                                shadowX: 0,
+                                shadowY: 0
+                            )
+                            .rotationEffect(.degrees(atan2(tiltY, tiltX) * 180 / .pi))
+                            .animation(.easeOut(duration: 0.2), value: tiltX)
+                            .animation(.easeOut(duration: 0.2), value: tiltY)
+                            .opacity(1.0 - min(abs(distance), 1.0))
+                            .animation(.easeInOut(duration: 0.3), value: distance)
+                    }
+                }
+            )
             .shadow(color: .black.opacity(0.3), radius: 20, x: 0, y: 10)
+    }
+}
+
+// MARK: - View Extension
+
+extension View {
+    @ViewBuilder
+    func `if`<Transform: View>(_ condition: Bool, transform: (Self) -> Transform) -> some View {
+        if condition {
+            transform(self)
+        } else {
+            self
+        }
     }
 }
 
