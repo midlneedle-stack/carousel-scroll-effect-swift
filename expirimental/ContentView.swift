@@ -65,9 +65,12 @@ struct ContentView: View {
     @State private var debugMaxAngle: Double = 80
     @State private var debugVelocityMultiplier: CGFloat = 0.3
     @State private var debugAnimDuration: Double = 1.00
-    @State private var debugCarouselOffset: CGFloat = 60
-    @State private var debugWheelBottomPadding: CGFloat = 40
-    @State private var debugWheelGradientEnabled: Bool = true
+    @State private var debugCarouselOffset: CGFloat = -60
+    @State private var debugWheelBottomPadding: CGFloat = 100
+    @State private var debugWheelFillGradientEnabled: Bool = false
+    @State private var debugWheelStrokeGradientEnabled: Bool = true
+    @State private var debugWheelFillGradientOpacity: Double = 0.1
+    @State private var debugWheelStrokeGradientOpacity: Double = 0.2
     @State private var debugGlassBorderEnabled: Bool = true
     @State private var debugGlassStrokeWidth: CGFloat = 1.0
     @State private var debugGlassStrokeOpacity: Double = 0.1
@@ -119,13 +122,12 @@ struct ContentView: View {
                                 imageName: items[index],
                                 size: cardWidth,
                                 glassBorderEnabled: debugGlassBorderEnabled,
-                                showGlassBorder: isCenterCard,
                                 glassStrokeWidth: debugGlassStrokeWidth,
                                 glassStrokeOpacity: debugGlassStrokeOpacity,
                                 glassGradientOpacity: debugGlassGradientOpacity,
                                 glassRadius: glassRadius,
-                                tiltX: motionManager.tiltX,
-                                tiltY: motionManager.tiltY,
+                                tiltX: isCenterCard ? motionManager.tiltX : 0,
+                                tiltY: isCenterCard ? motionManager.tiltY : 0,
                                 distance: distance
                             )
                             .scaleEffect(scale(for: distance))
@@ -171,7 +173,10 @@ struct ContentView: View {
 
                     // iPod-style scroll wheel at bottom
                     iPodScrollWheel(
-                        gradientEnabled: debugWheelGradientEnabled,
+                        fillGradientEnabled: debugWheelFillGradientEnabled,
+                        strokeGradientEnabled: debugWheelStrokeGradientEnabled,
+                        fillGradientOpacity: debugWheelFillGradientOpacity,
+                        strokeGradientOpacity: debugWheelStrokeGradientOpacity,
                         onScroll: { direction in
                             scrollCard(direction: direction)
                         }
@@ -189,7 +194,10 @@ struct ContentView: View {
                     animDuration: $debugAnimDuration,
                     carouselOffset: $debugCarouselOffset,
                     wheelBottomPadding: $debugWheelBottomPadding,
-                    wheelGradientEnabled: $debugWheelGradientEnabled,
+                    wheelFillGradientEnabled: $debugWheelFillGradientEnabled,
+                    wheelStrokeGradientEnabled: $debugWheelStrokeGradientEnabled,
+                    wheelFillGradientOpacity: $debugWheelFillGradientOpacity,
+                    wheelStrokeGradientOpacity: $debugWheelStrokeGradientOpacity,
                     glassBorderEnabled: $debugGlassBorderEnabled,
                     glassStrokeWidth: $debugGlassStrokeWidth,
                     glassStrokeOpacity: $debugGlassStrokeOpacity,
@@ -359,7 +367,10 @@ struct DebugMenu: View {
     @Binding var animDuration: Double
     @Binding var carouselOffset: CGFloat
     @Binding var wheelBottomPadding: CGFloat
-    @Binding var wheelGradientEnabled: Bool
+    @Binding var wheelFillGradientEnabled: Bool
+    @Binding var wheelStrokeGradientEnabled: Bool
+    @Binding var wheelFillGradientOpacity: Double
+    @Binding var wheelStrokeGradientOpacity: Double
     @Binding var glassBorderEnabled: Bool
     @Binding var glassStrokeWidth: CGFloat
     @Binding var glassStrokeOpacity: Double
@@ -382,7 +393,25 @@ struct DebugMenu: View {
                         Slider(value: $wheelBottomPadding, in: 0...300, step: 5)
                     }
 
-                    Toggle("Wheel Gradient", isOn: $wheelGradientEnabled)
+                    Toggle("Wheel Fill Gradient", isOn: $wheelFillGradientEnabled)
+
+                    if wheelFillGradientEnabled {
+                        VStack(alignment: .leading) {
+                            Text("Fill Gradient Opacity: \(wheelFillGradientOpacity, specifier: "%.2f")")
+                                .font(.caption)
+                            Slider(value: $wheelFillGradientOpacity, in: 0.0...1.0, step: 0.05)
+                        }
+                    }
+
+                    Toggle("Wheel Stroke Gradient", isOn: $wheelStrokeGradientEnabled)
+
+                    if wheelStrokeGradientEnabled {
+                        VStack(alignment: .leading) {
+                            Text("Stroke Gradient Opacity: \(wheelStrokeGradientOpacity, specifier: "%.2f")")
+                                .font(.caption)
+                            Slider(value: $wheelStrokeGradientOpacity, in: 0.0...1.0, step: 0.05)
+                        }
+                    }
 
                     Toggle("Glass Border", isOn: $glassBorderEnabled)
 
@@ -441,9 +470,12 @@ struct DebugMenu: View {
                         maxAngle = 80
                         velocityMultiplier = 0.3
                         animDuration = 1.00
-                        carouselOffset = 60
-                        wheelBottomPadding = 40
-                        wheelGradientEnabled = true
+                        carouselOffset = -60
+                        wheelBottomPadding = 100
+                        wheelFillGradientEnabled = false
+                        wheelStrokeGradientEnabled = true
+                        wheelFillGradientOpacity = 0.1
+                        wheelStrokeGradientOpacity = 0.2
                         glassBorderEnabled = true
                         glassStrokeWidth = 1.0
                         glassStrokeOpacity = 0.1
@@ -480,34 +512,73 @@ private extension Comparable {
 // MARK: - iPod Scroll Wheel
 
 struct iPodScrollWheel: View {
-    let gradientEnabled: Bool
+    let fillGradientEnabled: Bool
+    let strokeGradientEnabled: Bool
+    let fillGradientOpacity: Double
+    let strokeGradientOpacity: Double
     let onScroll: (ScrollDirection) -> Void
     @State private var lastAngle: CGFloat = 0
     @State private var counter: CGFloat = 0
     @State private var isScrolling = false
-    @State private var strokeOpacity: Double = 0.0
+    @State private var fillOpacity: Double = 0.0
     @State private var touchAngle: Double = 0
+
+    // Independent wheel stroke settings
+    private let wheelStrokeWidth: CGFloat = 1.0
+    private let wheelStrokeOpacity: Double = 0.1
 
     var body: some View {
         GeometryReader { geometry in
             let size = min(geometry.size.width, geometry.size.height)
 
             ZStack {
+                // Base stroke - only visible when scrolling, opacity depends on fillOpacity
+                Circle()
+                    .strokeBorder(
+                        Color.white.opacity(wheelStrokeOpacity * (fillOpacity / 0.1)),
+                        lineWidth: wheelStrokeWidth
+                    )
+                    .frame(width: size, height: size)
+                    .animation(.easeInOut(duration: 0.6), value: fillOpacity)
+
+                // Stroke gradient - follows finger when scrolling
+                if strokeGradientEnabled {
+                    Circle()
+                        .strokeBorder(
+                            LinearGradient(
+                                gradient: Gradient(stops: [
+                                    .init(color: Color.white.opacity(0), location: 0.0),
+                                    .init(color: Color.white.opacity(strokeGradientOpacity), location: 0.5),
+                                    .init(color: Color.white.opacity(0), location: 1.0)
+                                ]),
+                                startPoint: .init(x: 0.5 + 0.5 * cos(touchAngle * .pi / 180),
+                                                y: 0.5 + 0.5 * sin(touchAngle * .pi / 180)),
+                                endPoint: .init(x: 0.5 - 0.5 * cos(touchAngle * .pi / 180),
+                                              y: 0.5 - 0.5 * sin(touchAngle * .pi / 180))
+                            ),
+                            lineWidth: wheelStrokeWidth
+                        )
+                        .frame(width: size, height: size)
+                        .opacity(isScrolling ? 1.0 : 0.0)
+                        .animation(.easeOut(duration: 0.3), value: isScrolling)
+                        .allowsHitTesting(false)
+                }
+
                 // Base fill when scrolling
                 Circle()
-                    .fill(Color.white.opacity(strokeOpacity))
+                    .fill(Color.white.opacity(fillOpacity))
                     .frame(width: size, height: size)
-                    .animation(.easeInOut(duration: 0.6), value: strokeOpacity)
+                    .animation(.easeInOut(duration: 0.6), value: fillOpacity)
                     .allowsHitTesting(false)
 
-                // Gradient following finger
-                if gradientEnabled {
+                // Fill gradient following finger
+                if fillGradientEnabled {
                     Circle()
                         .fill(
                             LinearGradient(
                                 gradient: Gradient(stops: [
                                     .init(color: Color.white.opacity(0), location: 0.0),
-                                    .init(color: Color.white.opacity(0.1 * strokeOpacity / 0.1), location: 1.0)
+                                    .init(color: Color.white.opacity(fillGradientOpacity * fillOpacity / 0.1), location: 1.0)
                                 ]),
                                 startPoint: .init(x: 0.5 + 0.5 * cos(touchAngle * .pi / 180),
                                                 y: 0.5 + 0.5 * sin(touchAngle * .pi / 180)),
@@ -534,11 +605,11 @@ struct iPodScrollWheel: View {
     private func dragGesture(in size: CGFloat) -> some Gesture {
         DragGesture()
             .onChanged { value in
-                // Show stroke when scrolling starts
+                // Show fill when scrolling starts
                 if !isScrolling {
                     isScrolling = true
                     withAnimation(.easeIn(duration: 0.4)) {
-                        strokeOpacity = 0.1
+                        fillOpacity = 0.1
                     }
                 }
 
@@ -567,9 +638,9 @@ struct iPodScrollWheel: View {
                 lastAngle = 0
                 isScrolling = false
 
-                // Hide stroke when scrolling ends
+                // Hide fill when scrolling ends
                 withAnimation(.easeOut(duration: 0.6)) {
-                    strokeOpacity = 0.0
+                    fillOpacity = 0.0
                 }
             }
     }
@@ -579,7 +650,6 @@ private struct PosterCard: View {
     let imageName: String
     let size: CGFloat
     let glassBorderEnabled: Bool
-    let showGlassBorder: Bool
     let glassStrokeWidth: CGFloat
     let glassStrokeOpacity: Double
     let glassGradientOpacity: Double
@@ -595,7 +665,7 @@ private struct PosterCard: View {
             .frame(width: size, height: size)
             .overlay(
                 Group {
-                    if glassBorderEnabled && showGlassBorder {
+                    if glassBorderEnabled {
                         GlassBorderEffect(
                             cornerRadius: glassRadius,
                             strokeWidth: glassStrokeWidth,
@@ -627,36 +697,40 @@ struct GlassBorderEffect: View {
         return angle + 90 // Смещаем на 90° чтобы градиент был перпендикулярен наклону
     }
 
-    var effectOpacity: Double {
-        // Плавно затухает когда карточка отходит от центра
+    var gradientEffectOpacity: Double {
+        // Градиент плавно появляется только у центральной карточки
         return 1.0 - min(abs(distance), 1.0)
     }
 
     var body: some View {
-        RoundedRectangle(cornerRadius: cornerRadius)
-            .strokeBorder(
-                LinearGradient(
-                    gradient: Gradient(stops: [
-                        .init(color: .white.opacity(0), location: 0.0),
-                        .init(color: .white.opacity(gradientOpacity * effectOpacity), location: 0.5),
-                        .init(color: .white.opacity(0), location: 1.0)
-                    ]),
-                    startPoint: .init(
-                        x: 0.5 + 0.5 * cos(gradientAngle * .pi / 180),
-                        y: 0.5 + 0.5 * sin(gradientAngle * .pi / 180)
+        ZStack {
+            // Базовый stroke - всегда показан
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .strokeBorder(Color.white.opacity(strokeOpacity), lineWidth: strokeWidth)
+
+            // Градиент - только у центральной карточки
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .strokeBorder(
+                    LinearGradient(
+                        gradient: Gradient(stops: [
+                            .init(color: .white.opacity(0), location: 0.0),
+                            .init(color: .white.opacity(gradientOpacity * gradientEffectOpacity), location: 0.5),
+                            .init(color: .white.opacity(0), location: 1.0)
+                        ]),
+                        startPoint: .init(
+                            x: 0.5 + 0.5 * cos(gradientAngle * .pi / 180),
+                            y: 0.5 + 0.5 * sin(gradientAngle * .pi / 180)
+                        ),
+                        endPoint: .init(
+                            x: 0.5 - 0.5 * cos(gradientAngle * .pi / 180),
+                            y: 0.5 - 0.5 * sin(gradientAngle * .pi / 180)
+                        )
                     ),
-                    endPoint: .init(
-                        x: 0.5 - 0.5 * cos(gradientAngle * .pi / 180),
-                        y: 0.5 - 0.5 * sin(gradientAngle * .pi / 180)
-                    )
-                ),
-                lineWidth: strokeWidth
-            )
-            .background(
-                RoundedRectangle(cornerRadius: cornerRadius)
-                    .strokeBorder(Color.white.opacity(strokeOpacity * effectOpacity), lineWidth: strokeWidth)
-            )
-            .animation(.easeInOut(duration: 0.3), value: distance)
+                    lineWidth: strokeWidth
+                )
+                .animation(.easeOut(duration: 0.6), value: gradientAngle)
+                .animation(.easeInOut(duration: 0.3), value: distance)
+        }
     }
 }
 
