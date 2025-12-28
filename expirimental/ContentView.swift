@@ -45,7 +45,8 @@ struct ContentView: View {
         "Instagram post - 666",
         "Instagram post - 668",
         "Instagram post - 671",
-        "Instagram post - 672"
+        "Instagram post - 672",
+        "Instagram post - 673"
     ]
     
     private let stackCount = 12
@@ -75,10 +76,13 @@ struct ContentView: View {
     @State private var debugWheelFadeEnabled: Bool = false
     @State private var debugGlassBorderEnabled: Bool = true
     @State private var debugGlassStrokeWidth: CGFloat = 1.0
-    @State private var debugGlassStrokeOpacity: Double = 0.1
-    @State private var debugGlassGradientOpacity: Double = 0.2
+    @State private var debugGlassStrokeOpacity: Double = 0.10
+    @State private var debugGlassGradientOpacity: Double = 0.20
     @State private var debugGlassUnidirectionalGradient: Bool = false
     @State private var debugGlassOverlayOpacity: Double = 0.1
+    @State private var debugGlossyShineEnabled: Bool = false
+    @State private var debugGlossyShineIntensity: Double = 0.3
+    @State private var debugGlossyShineSize: Double = 0.4
     @State private var debugParallaxEnabled: Bool = true
     @State private var debugParallaxAmount: Double = 5.0
     @State private var debugCenterParallaxEnabled: Bool = true
@@ -138,6 +142,9 @@ struct ContentView: View {
                                 glassRadius: glassRadius,
                                 glassUnidirectionalGradient: debugGlassUnidirectionalGradient,
                                 glassOverlayOpacity: debugGlassOverlayOpacity,
+                                glossyShineEnabled: debugGlossyShineEnabled,
+                                glossyShineIntensity: debugGlossyShineIntensity,
+                                glossyShineSize: debugGlossyShineSize,
                                 tiltX: isCenterCard ? motionManager.tiltX : 0,
                                 tiltY: isCenterCard ? motionManager.tiltY : 0,
                                 distance: distance
@@ -230,6 +237,9 @@ struct ContentView: View {
                     glassGradientOpacity: $debugGlassGradientOpacity,
                     glassUnidirectionalGradient: $debugGlassUnidirectionalGradient,
                     glassOverlayOpacity: $debugGlassOverlayOpacity,
+                    glossyShineEnabled: $debugGlossyShineEnabled,
+                    glossyShineIntensity: $debugGlossyShineIntensity,
+                    glossyShineSize: $debugGlossyShineSize,
                     parallaxEnabled: $debugParallaxEnabled,
                     parallaxAmount: $debugParallaxAmount,
                     centerParallaxEnabled: $debugCenterParallaxEnabled,
@@ -423,6 +433,9 @@ struct DebugMenu: View {
     @Binding var glassGradientOpacity: Double
     @Binding var glassUnidirectionalGradient: Bool
     @Binding var glassOverlayOpacity: Double
+    @Binding var glossyShineEnabled: Bool
+    @Binding var glossyShineIntensity: Double
+    @Binding var glossyShineSize: Double
     @Binding var parallaxEnabled: Bool
     @Binding var parallaxAmount: Double
     @Binding var centerParallaxEnabled: Bool
@@ -504,6 +517,24 @@ struct DebugMenu: View {
                             Text("Card Overlay Opacity: \(glassOverlayOpacity, specifier: "%.2f")")
                                 .font(.caption)
                             Slider(value: $glassOverlayOpacity, in: 0.0...1.0, step: 0.05)
+                        }
+                    }
+                }
+
+                Section("Glossy Shine") {
+                    Toggle("Enabled", isOn: $glossyShineEnabled)
+
+                    if glossyShineEnabled {
+                        VStack(alignment: .leading) {
+                            Text("Intensity: \(glossyShineIntensity, specifier: "%.2f")")
+                                .font(.caption)
+                            Slider(value: $glossyShineIntensity, in: 0.0...1.0, step: 0.05)
+                        }
+
+                        VStack(alignment: .leading) {
+                            Text("Size: \(glossyShineSize, specifier: "%.2f")")
+                                .font(.caption)
+                            Slider(value: $glossyShineSize, in: 0.1...1.0, step: 0.05)
                         }
                     }
                 }
@@ -791,6 +822,9 @@ private struct PosterCard: View {
     let glassRadius: CGFloat
     let glassUnidirectionalGradient: Bool
     let glassOverlayOpacity: Double
+    let glossyShineEnabled: Bool
+    let glossyShineIntensity: Double
+    let glossyShineSize: Double
     let tiltX: Double
     let tiltY: Double
     let distance: CGFloat
@@ -809,6 +843,15 @@ private struct PosterCard: View {
             .resizable()
             .scaledToFill()
             .frame(width: size, height: size)
+            .colorEffect(
+                ShaderLibrary.glossyShine(
+                    .float2(size, size),
+                    .float2(tiltX, tiltY),
+                    .float(glossyShineIntensity * gradientEffectOpacity),
+                    .float(glossyShineSize)
+                ),
+                isEnabled: glossyShineEnabled
+            )
             .overlay(
                 Group {
                     if glassBorderEnabled {
@@ -822,34 +865,6 @@ private struct PosterCard: View {
                             tiltY: tiltY,
                             distance: distance
                         )
-                    }
-                }
-            )
-            .overlay(
-                Group {
-                    if glassBorderEnabled && glassUnidirectionalGradient {
-                        RoundedRectangle(cornerRadius: glassRadius)
-                            .fill(
-                                LinearGradient(
-                                    gradient: Gradient(stops: [
-                                        .init(color: .white.opacity(0), location: 0.0),
-                                        .init(color: .white.opacity(glassOverlayOpacity * gradientEffectOpacity), location: 0.5),
-                                        .init(color: .white.opacity(0), location: 1.0)
-                                    ]),
-                                    startPoint: .init(
-                                        x: 0.5 - tiltX * 0.5,
-                                        y: 0.5 - tiltY * 0.5
-                                    ),
-                                    endPoint: .init(
-                                        x: 0.5 + tiltX * 0.5,
-                                        y: 0.5 + tiltY * 0.5
-                                    )
-                                )
-                            )
-                            .animation(.easeOut(duration: 0.6), value: tiltX)
-                            .animation(.easeOut(duration: 0.6), value: tiltY)
-                            .animation(.easeInOut(duration: 0.3), value: distance)
-                            .allowsHitTesting(false)
                     }
                 }
             )

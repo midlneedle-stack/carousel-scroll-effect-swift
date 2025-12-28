@@ -6,10 +6,6 @@
 	objectVersion = 77;
 	objects = {
 
-/* Begin PBXBuildFile section */
-		8632C4B32EFFCD8400EA79BE /* SwiftGlass in Frameworks */ = {isa = PBXBuildFile; productRef = 8632C4B22EFFCD8400EA79BE /* SwiftGlass */; };
-/* End PBXBuildFile section */
-
 /* Begin PBXFileReference section */
 		86B05E5E2EFB1B2D0017694E /* expirimental.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = expirimental.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -27,7 +23,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				8632C4B32EFFCD8400EA79BE /* SwiftGlass in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -70,7 +65,6 @@
 			);
 			name = expirimental;
 			packageProductDependencies = (
-				8632C4B22EFFCD8400EA79BE /* SwiftGlass */,
 			);
 			productName = expirimental;
 			productReference = 86B05E5E2EFB1B2D0017694E /* expirimental.app */;
@@ -101,7 +95,6 @@
 			mainGroup = 86B05E552EFB1B2D0017694E;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				8632C4B12EFFCD8400EA79BE /* XCRemoteSwiftPackageReference "SwiftGlass" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 86B05E5F2EFB1B2D0017694E /* Products */;
@@ -339,25 +332,6 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
-
-/* Begin XCRemoteSwiftPackageReference section */
-		8632C4B12EFFCD8400EA79BE /* XCRemoteSwiftPackageReference "SwiftGlass" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/1998code/SwiftGlass";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 26.0.0;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
-
-/* Begin XCSwiftPackageProductDependency section */
-		8632C4B22EFFCD8400EA79BE /* SwiftGlass */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 8632C4B12EFFCD8400EA79BE /* XCRemoteSwiftPackageReference "SwiftGlass" */;
-			productName = SwiftGlass;
-		};
-/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 86B05E562EFB1B2D0017694E /* Project object */;
 }
