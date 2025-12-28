@@ -27,17 +27,20 @@ using namespace metal;
 
     // Create soft, diffuse stripe that runs perpendicular to the light direction
     // This matches the orientation of the stroke gradient
-    float shine = 1.0 - smoothstep(0.0, shineSize * 0.5, stripeDistance);
+    // Made wider and more diffuse
+    float shine = 1.0 - smoothstep(0.0, shineSize * 0.7, stripeDistance);
 
     // Apply gentle falloff along the stripe length as well
+    // Made longer for more coverage
     float lengthDistance = abs(dot(centerDelta, lightDir));
-    float lengthFade = 1.0 - smoothstep(0.0, shineSize * 1.5, lengthDistance);
+    float lengthFade = 1.0 - smoothstep(0.0, shineSize * 2.0, lengthDistance);
 
     // Combine perpendicular stripe with length fade
     shine *= lengthFade;
 
     // Apply very gentle curve for soft, natural falloff
-    shine = pow(shine, 0.7);
+    // Made even softer
+    shine = pow(shine, 0.6);
 
     // Apply intensity
     shine *= intensity;

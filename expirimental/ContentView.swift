@@ -34,7 +34,7 @@ class MotionManager: ObservableObject {
 }
 
 struct ContentView: View {
-    private let posters = [
+    private let carPosters = [
         "Instagram post - 54",
         "Instagram post - 55",
         "Instagram post - 56",
@@ -48,13 +48,72 @@ struct ContentView: View {
         "Instagram post - 672",
         "Instagram post - 673"
     ]
-    
-    private let stackCount = 12
-    private let initialStackIndex = 6
+
+    private let musicPosters = [
+        "air",
+        "beatle",
+        "bitterend",
+        "blondie",
+        "brat",
+        "brian",
+        "canada",
+        "carpenter",
+        "coen",
+        "deftones",
+        "depeche",
+        "division",
+        "doom",
+        "doors",
+        "downshift",
+        "duft",
+        "football",
+        "head",
+        "heawen",
+        "iscala",
+        "joy",
+        "justic",
+        "justicee",
+        "lllcomun",
+        "lush",
+        "martic",
+        "massive",
+        "mazzy",
+        "meat",
+        "men",
+        "metall",
+        "mmdood",
+        "paranoid",
+        "pasosh",
+        "punk",
+        "slint",
+        "slowdive",
+        "sonic",
+        "sunny",
+        "tony",
+        "toxicity",
+        "tribe",
+        "tubeaway",
+        "tyler",
+        "win",
+        "youth"
+    ]
+
+    private var posters: [String] {
+        debugPosterSet == 0 ? carPosters : musicPosters
+    }
+
+    private var stackCount: Int {
+        debugPosterSet == 0 ? 12 : 6  // Music uses fewer stacks for performance
+    }
+
+    private var initialStackIndex: Int {
+        debugPosterSet == 0 ? 6 : 3  // Adjust initial index for music
+    }
     private let visibleCardWidthRatio: CGFloat = 0.58
-    
+
     @State private var dragOffset: CGFloat = 0
     @State private var currentIndex: Int
+    @State private var debugPosterSet: Int = 0
     @State private var dragStartTime: Date?
     @State private var isDragging = false
     @State private var accumulatedVelocity: CGFloat = 0  // накопленная скорость
@@ -72,17 +131,14 @@ struct ContentView: View {
     @State private var debugWheelStrokeGradientEnabled: Bool = true
     @State private var debugWheelFillGradientOpacity: Double = 0.1
     @State private var debugWheelStrokeGradientOpacity: Double = 0.2
-    @State private var debugWheelUnidirectionalGradient: Bool = false
     @State private var debugWheelFadeEnabled: Bool = false
     @State private var debugGlassBorderEnabled: Bool = true
     @State private var debugGlassStrokeWidth: CGFloat = 1.0
     @State private var debugGlassStrokeOpacity: Double = 0.10
     @State private var debugGlassGradientOpacity: Double = 0.20
-    @State private var debugGlassUnidirectionalGradient: Bool = false
-    @State private var debugGlassOverlayOpacity: Double = 0.1
-    @State private var debugGlossyShineEnabled: Bool = false
-    @State private var debugGlossyShineIntensity: Double = 0.3
-    @State private var debugGlossyShineSize: Double = 0.4
+    @State private var debugGlossyShineEnabled: Bool = true
+    @State private var debugGlossyShineIntensity: Double = 0.05
+    @State private var debugGlossyShineSize: Double = 1.00
     @State private var debugParallaxEnabled: Bool = true
     @State private var debugParallaxAmount: Double = 5.0
     @State private var debugCenterParallaxEnabled: Bool = true
@@ -94,7 +150,8 @@ struct ContentView: View {
     @StateObject private var motionManager = MotionManager()
     
     init() {
-        let initialID = initialStackIndex * posters.count
+        // Always start with cars default position
+        let initialID = 6 * carPosters.count
         _currentIndex = State(initialValue: initialID)
     }
     
@@ -132,7 +189,9 @@ struct ContentView: View {
                             let distance = clampedDistance(for: index, cardWidth: cardWidth)
                             let isCenterCard = abs(distance) < 0.5
 
-                            PosterCard(
+                            // Only render cards within visible range for performance
+                            if abs(distance) < 2.5 {
+                                PosterCard(
                                 imageName: items[index],
                                 size: cardWidth,
                                 glassBorderEnabled: debugGlassBorderEnabled,
@@ -140,9 +199,7 @@ struct ContentView: View {
                                 glassStrokeOpacity: debugGlassStrokeOpacity,
                                 glassGradientOpacity: debugGlassGradientOpacity,
                                 glassRadius: glassRadius,
-                                glassUnidirectionalGradient: debugGlassUnidirectionalGradient,
-                                glassOverlayOpacity: debugGlassOverlayOpacity,
-                                glossyShineEnabled: debugGlossyShineEnabled,
+                                glossyShineEnabled: debugGlossyShineEnabled && isCenterCard,
                                 glossyShineIntensity: debugGlossyShineIntensity,
                                 glossyShineSize: debugGlossyShineSize,
                                 tiltX: isCenterCard ? motionManager.tiltX : 0,
@@ -167,6 +224,7 @@ struct ContentView: View {
                             )
                             .zIndex(zIndex(for: distance))
                             .opacity(opacity(for: distance))
+                            }
                         }
                     }
                     .frame(height: cardHeight * 1.2)
@@ -204,7 +262,6 @@ struct ContentView: View {
                         strokeGradientEnabled: debugWheelStrokeGradientEnabled,
                         fillGradientOpacity: debugWheelFillGradientOpacity,
                         strokeGradientOpacity: debugWheelStrokeGradientOpacity,
-                        unidirectionalGradient: debugWheelUnidirectionalGradient,
                         fadeEnabled: debugWheelFadeEnabled,
                         tiltX: motionManager.tiltX,
                         tiltY: motionManager.tiltY,
@@ -219,6 +276,7 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .sheet(isPresented: $showDebug) {
                 DebugMenu(
+                    posterSet: $debugPosterSet,
                     spacing: $debugSpacing,
                     maxAngle: $debugMaxAngle,
                     velocityMultiplier: $debugVelocityMultiplier,
@@ -229,14 +287,11 @@ struct ContentView: View {
                     wheelStrokeGradientEnabled: $debugWheelStrokeGradientEnabled,
                     wheelFillGradientOpacity: $debugWheelFillGradientOpacity,
                     wheelStrokeGradientOpacity: $debugWheelStrokeGradientOpacity,
-                    wheelUnidirectionalGradient: $debugWheelUnidirectionalGradient,
                     wheelFadeEnabled: $debugWheelFadeEnabled,
                     glassBorderEnabled: $debugGlassBorderEnabled,
                     glassStrokeWidth: $debugGlassStrokeWidth,
                     glassStrokeOpacity: $debugGlassStrokeOpacity,
                     glassGradientOpacity: $debugGlassGradientOpacity,
-                    glassUnidirectionalGradient: $debugGlassUnidirectionalGradient,
-                    glassOverlayOpacity: $debugGlassOverlayOpacity,
                     glossyShineEnabled: $debugGlossyShineEnabled,
                     glossyShineIntensity: $debugGlossyShineIntensity,
                     glossyShineSize: $debugGlossyShineSize,
@@ -252,6 +307,13 @@ struct ContentView: View {
         .onChange(of: currentIndex) { _, _ in
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 recenterIndexIfNeeded()
+            }
+        }
+        .onChange(of: debugPosterSet) { _, newValue in
+            // Reset to initial position when changing poster set
+            let newPosters = newValue == 0 ? carPosters : musicPosters
+            withAnimation(.easeInOut(duration: 0.3)) {
+                currentIndex = initialStackIndex * newPosters.count
             }
         }
     }
@@ -415,6 +477,7 @@ struct ContentView: View {
 // MARK: - Debug Menu
 
 struct DebugMenu: View {
+    @Binding var posterSet: Int
     @Binding var spacing: CGFloat
     @Binding var maxAngle: Double
     @Binding var velocityMultiplier: CGFloat
@@ -425,14 +488,11 @@ struct DebugMenu: View {
     @Binding var wheelStrokeGradientEnabled: Bool
     @Binding var wheelFillGradientOpacity: Double
     @Binding var wheelStrokeGradientOpacity: Double
-    @Binding var wheelUnidirectionalGradient: Bool
     @Binding var wheelFadeEnabled: Bool
     @Binding var glassBorderEnabled: Bool
     @Binding var glassStrokeWidth: CGFloat
     @Binding var glassStrokeOpacity: Double
     @Binding var glassGradientOpacity: Double
-    @Binding var glassUnidirectionalGradient: Bool
-    @Binding var glassOverlayOpacity: Double
     @Binding var glossyShineEnabled: Bool
     @Binding var glossyShineIntensity: Double
     @Binding var glossyShineSize: Double
@@ -447,6 +507,13 @@ struct DebugMenu: View {
     var body: some View {
         NavigationView {
             Form {
+                Section("Poster Set") {
+                    Picker("Collection", selection: $posterSet) {
+                        Text("Cars").tag(0)
+                        Text("Music").tag(1)
+                    }
+                }
+
                 Section("Layout") {
                     VStack(alignment: .leading) {
                         Text("Carousel Offset: \(carouselOffset, specifier: "%.0f")pt")
@@ -499,24 +566,6 @@ struct DebugMenu: View {
                             Text("Gradient Opacity: \(glassGradientOpacity, specifier: "%.2f")")
                                 .font(.caption)
                             Slider(value: $glassGradientOpacity, in: 0.0...1.0, step: 0.05)
-                        }
-                    }
-                }
-
-                Section("Gradients") {
-                    Toggle("Unidirectional Mode", isOn: Binding(
-                        get: { glassUnidirectionalGradient },
-                        set: { newValue in
-                            glassUnidirectionalGradient = newValue
-                            wheelUnidirectionalGradient = newValue
-                        }
-                    ))
-
-                    if glassUnidirectionalGradient {
-                        VStack(alignment: .leading) {
-                            Text("Card Overlay Opacity: \(glassOverlayOpacity, specifier: "%.2f")")
-                                .font(.caption)
-                            Slider(value: $glassOverlayOpacity, in: 0.0...1.0, step: 0.05)
                         }
                     }
                 }
@@ -599,6 +648,7 @@ struct DebugMenu: View {
 
                 Section {
                     Button("Reset to Defaults") {
+                        posterSet = 0
                         spacing = 0.55
                         maxAngle = 80
                         velocityMultiplier = 0.3
@@ -609,14 +659,11 @@ struct DebugMenu: View {
                         wheelStrokeGradientEnabled = true
                         wheelFillGradientOpacity = 0.1
                         wheelStrokeGradientOpacity = 0.2
-                        wheelUnidirectionalGradient = false
                         wheelFadeEnabled = false
                         glassBorderEnabled = true
                         glassStrokeWidth = 1.0
                         glassStrokeOpacity = 0.1
                         glassGradientOpacity = 0.2
-                        glassUnidirectionalGradient = false
-                        glassOverlayOpacity = 0.1
                         parallaxEnabled = true
                         parallaxAmount = 10.0
                         centerParallaxEnabled = true
@@ -659,7 +706,6 @@ struct iPodScrollWheel: View {
     let strokeGradientEnabled: Bool
     let fillGradientOpacity: Double
     let strokeGradientOpacity: Double
-    let unidirectionalGradient: Bool
     let fadeEnabled: Bool
     let tiltX: Double
     let tiltY: Double
@@ -704,10 +750,7 @@ struct iPodScrollWheel: View {
                     Circle()
                         .strokeBorder(
                             LinearGradient(
-                                gradient: Gradient(stops: unidirectionalGradient ? [
-                                    .init(color: Color.white.opacity(0), location: 0.5),
-                                    .init(color: Color.white.opacity(strokeGradientOpacity), location: 1.0)
-                                ] : [
+                                gradient: Gradient(stops: [
                                     .init(color: Color.white.opacity(0), location: 0.0),
                                     .init(color: Color.white.opacity(strokeGradientOpacity), location: 0.5),
                                     .init(color: Color.white.opacity(0), location: 1.0)
@@ -820,8 +863,6 @@ private struct PosterCard: View {
     let glassStrokeOpacity: Double
     let glassGradientOpacity: Double
     let glassRadius: CGFloat
-    let glassUnidirectionalGradient: Bool
-    let glassOverlayOpacity: Double
     let glossyShineEnabled: Bool
     let glossyShineIntensity: Double
     let glossyShineSize: Double
@@ -860,7 +901,6 @@ private struct PosterCard: View {
                             strokeWidth: glassStrokeWidth,
                             strokeOpacity: glassStrokeOpacity,
                             gradientOpacity: glassGradientOpacity,
-                            unidirectionalGradient: glassUnidirectionalGradient,
                             tiltX: tiltX,
                             tiltY: tiltY,
                             distance: distance
@@ -877,7 +917,6 @@ struct GlassBorderEffect: View {
     let strokeWidth: CGFloat
     let strokeOpacity: Double
     let gradientOpacity: Double
-    let unidirectionalGradient: Bool
     let tiltX: Double
     let tiltY: Double
     let distance: CGFloat
@@ -903,10 +942,7 @@ struct GlassBorderEffect: View {
             RoundedRectangle(cornerRadius: cornerRadius)
                 .strokeBorder(
                     LinearGradient(
-                        gradient: Gradient(stops: unidirectionalGradient ? [
-                            .init(color: .white.opacity(0), location: 0.5),
-                            .init(color: .white.opacity(gradientOpacity * gradientEffectOpacity), location: 1.0)
-                        ] : [
+                        gradient: Gradient(stops: [
                             .init(color: .white.opacity(0), location: 0.0),
                             .init(color: .white.opacity(gradientOpacity * gradientEffectOpacity), location: 0.5),
                             .init(color: .white.opacity(0), location: 1.0)
