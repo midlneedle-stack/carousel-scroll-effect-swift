@@ -147,8 +147,12 @@ struct ContentView: View {
     @State private var debugParallaxRotationAmount: Double = 6.0
     private let glassRadius: CGFloat = 0
 
+    // Режим управления
+    @State private var controlMode: ControlMode = .scrollWheel
+
     @StateObject private var motionManager = MotionManager()
-    
+    @StateObject private var cameraControlManager = CameraControlManager()
+
     init() {
         // Always start with cars default position
         let initialID = 6 * carPosters.count
@@ -181,7 +185,10 @@ struct ContentView: View {
                             .frame(height: 60)
                     }
 
-                    Spacer()
+                    // Spacer зависит от режима
+                    if controlMode == .scrollWheel || controlMode == .cameraControl {
+                        Spacer()
+                    }
 
                     // Carousel
                     ZStack {
@@ -254,28 +261,51 @@ struct ContentView: View {
                             }
                     )
 
-                    Spacer()
+                    // Spacer зависит от режима
+                    if controlMode == .scrollWheel || controlMode == .cameraControl {
+                        Spacer()
+                    }
 
-                    // iPod-style scroll wheel at bottom
-                    iPodScrollWheel(
-                        fillGradientEnabled: debugWheelFillGradientEnabled,
-                        strokeGradientEnabled: debugWheelStrokeGradientEnabled,
-                        fillGradientOpacity: debugWheelFillGradientOpacity,
-                        strokeGradientOpacity: debugWheelStrokeGradientOpacity,
-                        fadeEnabled: debugWheelFadeEnabled,
-                        tiltX: motionManager.tiltX,
-                        tiltY: motionManager.tiltY,
-                        onScroll: { direction in
-                            scrollCard(direction: direction)
-                        }
-                    )
-                    .frame(width: 180, height: 180)
-                    .padding(.bottom, debugWheelBottomPadding)
+                    // iPod-style scroll wheel at bottom - только в режиме scrollWheel
+                    if controlMode == .scrollWheel && !cameraControlManager.controlsInFullscreen {
+                        iPodScrollWheel(
+                            fillGradientEnabled: debugWheelFillGradientEnabled,
+                            strokeGradientEnabled: debugWheelStrokeGradientEnabled,
+                            fillGradientOpacity: debugWheelFillGradientOpacity,
+                            strokeGradientOpacity: debugWheelStrokeGradientOpacity,
+                            fadeEnabled: debugWheelFadeEnabled,
+                            tiltX: motionManager.tiltX,
+                            tiltY: motionManager.tiltY,
+                            onScroll: { direction in
+                                scrollCard(direction: direction)
+                            }
+                        )
+                        .frame(width: 180, height: 180)
+                        .padding(.bottom, debugWheelBottomPadding)
+                        .transition(.opacity)
+                    }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .overlay(alignment: .topTrailing) {
+                // Camera preview - только в режиме cameraControl
+                if controlMode == .cameraControl && cameraControlManager.isSupported {
+                    CameraPreviewView(manager: cameraControlManager)
+                        .frame(width: 100, height: 100)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16)
+                                .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                        )
+                        .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
+                        .padding(.top, 60)
+                        .padding(.trailing, 16)
+                        .transition(.scale.combined(with: .opacity))
+                }
+            }
             .sheet(isPresented: $showDebug) {
                 DebugMenu(
+                    controlMode: $controlMode,
                     posterSet: $debugPosterSet,
                     spacing: $debugSpacing,
                     maxAngle: $debugMaxAngle,
@@ -300,11 +330,12 @@ struct ContentView: View {
                     centerParallaxEnabled: $debugCenterParallaxEnabled,
                     centerParallaxAmount: $debugCenterParallaxAmount,
                     parallaxRotationEnabled: $debugParallaxRotationEnabled,
-                    parallaxRotationAmount: $debugParallaxRotationAmount
+                    parallaxRotationAmount: $debugParallaxRotationAmount,
+                    cameraControlManager: cameraControlManager
                 )
             }
         }
-        .onChange(of: currentIndex) { _, _ in
+        .onChange(of: currentIndex) { _, newValue in
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 recenterIndexIfNeeded()
             }
@@ -315,6 +346,44 @@ struct ContentView: View {
             withAnimation(.easeInOut(duration: 0.3)) {
                 currentIndex = initialStackIndex * newPosters.count
             }
+        }
+        .task {
+            // Настраиваем Camera Control только в режиме cameraControl
+            if controlMode == .cameraControl {
+                await cameraControlManager.setup(itemCount: posters.count)
+
+                // Устанавливаем callback для обновления карусели
+                cameraControlManager.onCarouselIndexChanged = { [self] step in
+                    // step = +1 (forward) или -1 (backward)
+                    // Работает как iPod scroll wheel - пошаговая прокрутка
+                    let newIndex = (currentIndex + step).clamped(to: 0...(items.count - 1))
+
+                    withAnimation(.timingCurve(0.12, 0.9, 0.2, 1.0, duration: 0.5)) {
+                        currentIndex = newIndex
+                    }
+                }
+            }
+        }
+        .onChange(of: controlMode) { oldValue, newValue in
+            // Запускаем/останавливаем Camera Control при смене режима
+            if newValue == .cameraControl && oldValue != .cameraControl {
+                Task {
+                    await cameraControlManager.setup(itemCount: posters.count)
+
+                    cameraControlManager.onCarouselIndexChanged = { [self] step in
+                        let newIndex = (currentIndex + step).clamped(to: 0...(items.count - 1))
+
+                        withAnimation(.timingCurve(0.12, 0.9, 0.2, 1.0, duration: 0.5)) {
+                            currentIndex = newIndex
+                        }
+                    }
+                }
+            } else if oldValue == .cameraControl && newValue != .cameraControl {
+                cameraControlManager.cleanup()
+            }
+        }
+        .onDisappear {
+            cameraControlManager.cleanup()
         }
     }
     
@@ -477,6 +546,7 @@ struct ContentView: View {
 // MARK: - Debug Menu
 
 struct DebugMenu: View {
+    @Binding var controlMode: ControlMode
     @Binding var posterSet: Int
     @Binding var spacing: CGFloat
     @Binding var maxAngle: Double
@@ -502,11 +572,66 @@ struct DebugMenu: View {
     @Binding var centerParallaxAmount: Double
     @Binding var parallaxRotationEnabled: Bool
     @Binding var parallaxRotationAmount: Double
+    @ObservedObject var cameraControlManager: CameraControlManager
     @Environment(\.dismiss) var dismiss
 
     var body: some View {
         NavigationView {
             Form {
+                Section("Control Mode") {
+                    Picker("Mode", selection: $controlMode) {
+                        Text("Scroll Wheel").tag(ControlMode.scrollWheel)
+                        Text("Simple Swipe").tag(ControlMode.simpleSwipe)
+                        Text("Camera Control").tag(ControlMode.cameraControl)
+                    }
+                }
+
+                if controlMode == .cameraControl {
+                    Section("Camera Control Status") {
+                    HStack {
+                        Text("Status")
+                        Spacer()
+                        if cameraControlManager.isSupported {
+                            Text("Supported")
+                                .foregroundColor(.green)
+                        } else {
+                            Text("Not Available")
+                                .foregroundColor(.secondary)
+                        }
+                    }
+
+                    if cameraControlManager.isSupported {
+                        HStack {
+                            Text("Active")
+                            Spacer()
+                            if cameraControlManager.isActive {
+                                Text("Yes")
+                                    .foregroundColor(.green)
+                            } else {
+                                Text("No")
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+
+                        HStack {
+                            Text("Fullscreen Mode")
+                            Spacer()
+                            if cameraControlManager.controlsInFullscreen {
+                                Text("Yes")
+                                    .foregroundColor(.blue)
+                            } else {
+                                Text("No")
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+
+                        Text("Light press Camera Control to activate carousel slider")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+
                 Section("Poster Set") {
                     Picker("Collection", selection: $posterSet) {
                         Text("Cars").tag(0)
@@ -691,6 +816,12 @@ struct DebugMenu: View {
 enum ScrollDirection {
     case forward
     case backward
+}
+
+enum ControlMode {
+    case scrollWheel    // Scroll wheel внизу + карусель сверху
+    case simpleSwipe    // Только свайп, карусель по центру
+    case cameraControl  // Camera Control + окно камеры
 }
 
 private extension Comparable {
