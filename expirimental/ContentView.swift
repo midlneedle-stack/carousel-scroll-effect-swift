@@ -192,6 +192,14 @@ struct ContentView: View {
 
                     // Carousel
                     ZStack {
+                        // Camera preview - спрятан за карточками
+                        if controlMode == .cameraControl && cameraControlManager.isSupported {
+                            CameraPreviewView(manager: cameraControlManager)
+                                .frame(width: 10, height: 10)
+                                .opacity(0.1)
+                                .zIndex(-1)
+                        }
+
                         ForEach(items.indices, id: \.self) { index in
                             let distance = clampedDistance(for: index, cardWidth: cardWidth)
                             let isCenterCard = abs(distance) < 0.5
@@ -287,22 +295,6 @@ struct ContentView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .overlay(alignment: .topTrailing) {
-                // Camera preview - только в режиме cameraControl
-                if controlMode == .cameraControl && cameraControlManager.isSupported {
-                    CameraPreviewView(manager: cameraControlManager)
-                        .frame(width: 100, height: 100)
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 16)
-                                .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                        )
-                        .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
-                        .padding(.top, 60)
-                        .padding(.trailing, 16)
-                        .transition(.scale.combined(with: .opacity))
-                }
-            }
             .sheet(isPresented: $showDebug) {
                 DebugMenu(
                     controlMode: $controlMode,
