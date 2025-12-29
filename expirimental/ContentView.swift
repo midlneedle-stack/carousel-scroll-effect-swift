@@ -224,11 +224,14 @@ struct ContentView: View {
                             .scaleEffect(scale(for: distance))
                             .rotation3DEffect(
                                 .degrees(rotation(for: distance) + (debugParallaxRotationEnabled ? -motionManager.tiltX * debugParallaxRotationAmount : 0)),
-                                axis: (x: 0, y: 1, z: 0),
+                                axis: controlMode == .cameraControl ? (x: 1, y: 0, z: 0) : (x: 0, y: 1, z: 0),
                                 anchor: .center,
                                 perspective: 0.7
                             )
-                            .offset(x: xOffset(for: distance, cardWidth: cardWidth))
+                            .offset(
+                                x: controlMode == .cameraControl ? 0 : xOffset(for: distance, cardWidth: cardWidth),
+                                y: controlMode == .cameraControl ? yOffset(for: distance, cardWidth: cardWidth) : 0
+                            )
                             .offset(
                                 x: debugParallaxEnabled ? motionManager.tiltX * debugParallaxAmount : 0,
                                 y: debugParallaxEnabled ? motionManager.tiltY * debugParallaxAmount : 0
@@ -258,12 +261,12 @@ struct ContentView: View {
 
                                 // Плавное начало драга
                                 withAnimation(.interactiveSpring(response: 0.25, dampingFraction: 1.0)) {
-                                    dragOffset = value.translation.width
+                                    dragOffset = controlMode == .cameraControl ? value.translation.height : value.translation.width
                                 }
                             }
                             .onEnded { value in
                                 let cardWidth = proxy.size.width * visibleCardWidthRatio
-                                handleDragEnd(value, cardWidth: cardWidth)
+                                handleDragEnd(value, cardWidth: cardWidth, isVertical: controlMode == .cameraControl)
                                 dragStartTime = nil
                                 isDragging = false
                             }
@@ -396,8 +399,8 @@ struct ContentView: View {
 
     // MARK: - Drag handling
 
-    private func handleDragEnd(_ value: DragGesture.Value, cardWidth: CGFloat) {
-        let translation = value.translation.width
+    private func handleDragEnd(_ value: DragGesture.Value, cardWidth: CGFloat, isVertical: Bool = false) {
+        let translation = isVertical ? value.translation.height : value.translation.width
         
         let duration: TimeInterval
         if let start = dragStartTime {
@@ -479,7 +482,14 @@ struct ContentView: View {
         let clampedDist = min(max(distance, -1.5), 1.5)
         return clampedDist * spacing
     }
-    
+
+    private func yOffset(for distance: CGFloat, cardWidth: CGFloat) -> CGFloat {
+        let spacing: CGFloat = cardWidth * debugSpacing
+        // Ограничиваем offset для дальних карточек
+        let clampedDist = min(max(distance, -1.5), 1.5)
+        return clampedDist * spacing
+    }
+
     private func scale(for distance: CGFloat) -> CGFloat {
         let d = min(abs(distance), 2.5)
         let t = d / 2.5
